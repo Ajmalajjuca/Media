@@ -105,26 +105,31 @@ const NewsWebsite = () => {
     headerContent: {
       maxWidth: '1200px',
       margin: '0 auto',
-      padding: '0 2rem',
+      padding: '0 1rem',
       display: 'flex',
       justifyContent: 'space-between',
-      alignItems: 'center'
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: '1rem'
     },
     logo: {
-      fontSize: '1.8rem',
+      fontSize: 'clamp(1.5rem, 4vw, 1.8rem)',
       fontWeight: 'bold',
       color: '#ff6b6b'
     },
     nav: {
       display: 'flex',
-      gap: '2rem',
-      alignItems: 'center'
+      gap: 'clamp(1rem, 3vw, 2rem)',
+      alignItems: 'center',
+      flexWrap: 'wrap'
     },
     navLink: {
       color: 'white',
       textDecoration: 'none',
       fontWeight: '500',
-      transition: 'color 0.3s ease'
+      transition: 'color 0.3s ease',
+      fontSize: 'clamp(0.9rem, 2.5vw, 1rem)',
+      whiteSpace: 'nowrap'
     },
     searchContainer: {
       display: 'flex',
@@ -132,7 +137,9 @@ const NewsWebsite = () => {
       backgroundColor: '#333',
       borderRadius: '25px',
       padding: '0.5rem 1rem',
-      minWidth: '250px'
+      minWidth: 'min(250px, 100%)',
+      width: '100%',
+      maxWidth: '300px'
     },
     searchInput: {
       background: 'none',
@@ -140,31 +147,36 @@ const NewsWebsite = () => {
       color: 'white',
       outline: 'none',
       width: '100%',
-      padding: '0.25rem'
+      padding: '0.25rem',
+      fontSize: 'clamp(0.9rem, 2.5vw, 1rem)'
     },
     main: {
       maxWidth: '1200px',
       margin: '0 auto',
-      padding: '2rem'
+      padding: 'clamp(1rem, 4vw, 2rem)'
     },
     categoryBar: {
       display: 'flex',
-      gap: '1rem',
+      gap: '0.5rem',
       marginBottom: '2rem',
-      flexWrap: 'wrap'
+      flexWrap: 'wrap',
+      justifyContent: 'center'
     },
     categoryButton: {
       background: 'none',
       borderWidth: '2px',
       borderStyle: 'solid',
       borderColor: '#e9ecef',
-      padding: '0.5rem 1rem',
+      padding: 'clamp(0.4rem, 2vw, 0.5rem) clamp(0.8rem, 3vw, 1rem)',
       borderRadius: '25px',
       cursor: 'pointer',
       transition: 'all 0.3s ease',
       fontWeight: '500',
       textTransform: 'capitalize',
-      color: '#333'
+      color: '#333',
+      fontSize: 'clamp(0.8rem, 2.2vw, 0.9rem)',
+      whiteSpace: 'nowrap',
+      minWidth: 'fit-content'
     },
     categoryButtonActive: {
       backgroundColor: '#ff6b6b',
@@ -174,13 +186,14 @@ const NewsWebsite = () => {
       color: 'white'
     },
     featuredSection: {
-      marginBottom: '3rem'
+      marginBottom: 'clamp(2rem, 5vw, 3rem)'
     },
     featuredTitle: {
-      fontSize: '2rem',
+      fontSize: 'clamp(1.5rem, 5vw, 2rem)',
       fontWeight: 'bold',
       marginBottom: '1.5rem',
-      color: '#333'
+      color: '#333',
+      textAlign: 'center'
     },
     featuredCard: {
       backgroundColor: 'white',
@@ -192,14 +205,14 @@ const NewsWebsite = () => {
     },
     featuredImage: {
       width: '100%',
-      height: '400px',
+      height: 'clamp(250px, 50vw, 400px)',
       objectFit: 'cover'
     },
     featuredContent: {
-      padding: '2rem'
+      padding: 'clamp(1.5rem, 4vw, 2rem)'
     },
     articleTitle: {
-      fontSize: '1.8rem',
+      fontSize: 'clamp(1.3rem, 4vw, 1.8rem)',
       fontWeight: 'bold',
       marginBottom: '1rem',
       color: '#333',
@@ -207,7 +220,7 @@ const NewsWebsite = () => {
     },
     articleSummary: {
       color: '#666',
-      fontSize: '1.1rem',
+      fontSize: 'clamp(1rem, 3vw, 1.1rem)',
       lineHeight: '1.6',
       marginBottom: '1rem'
     },
@@ -215,13 +228,15 @@ const NewsWebsite = () => {
       display: 'flex',
       justifyContent: 'space-between',
       alignItems: 'center',
-      fontSize: '0.9rem',
-      color: '#888'
+      fontSize: 'clamp(0.8rem, 2.2vw, 0.9rem)',
+      color: '#888',
+      flexWrap: 'wrap',
+      gap: '0.5rem'
     },
     newsGrid: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))',
-      gap: '2rem',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
+      gap: 'clamp(1rem, 3vw, 2rem)',
       marginTop: '2rem'
     },
     newsCard: {
@@ -234,14 +249,14 @@ const NewsWebsite = () => {
     },
     newsImage: {
       width: '100%',
-      height: '200px',
+      height: 'clamp(180px, 35vw, 200px)',
       objectFit: 'cover'
     },
     newsContent: {
-      padding: '1.5rem'
+      padding: 'clamp(1rem, 3vw, 1.5rem)'
     },
     newsTitle: {
-      fontSize: '1.2rem',
+      fontSize: 'clamp(1.1rem, 3.5vw, 1.2rem)',
       fontWeight: 'bold',
       marginBottom: '0.5rem',
       color: '#333',
@@ -249,7 +264,7 @@ const NewsWebsite = () => {
     },
     newsSummary: {
       color: '#666',
-      fontSize: '0.95rem',
+      fontSize: 'clamp(0.9rem, 2.5vw, 0.95rem)',
       lineHeight: '1.5',
       marginBottom: '1rem'
     },
@@ -259,7 +274,7 @@ const NewsWebsite = () => {
       color: 'white',
       padding: '0.25rem 0.75rem',
       borderRadius: '15px',
-      fontSize: '0.8rem',
+      fontSize: 'clamp(0.7rem, 2vw, 0.8rem)',
       fontWeight: '500',
       textTransform: 'uppercase',
       marginBottom: '1rem'
@@ -267,18 +282,40 @@ const NewsWebsite = () => {
     footer: {
       backgroundColor: '#1a1a1a',
       color: 'white',
-      padding: '3rem 0',
-      marginTop: '4rem'
+      padding: 'clamp(2rem, 5vw, 3rem) 0',
+      marginTop: 'clamp(3rem, 6vw, 4rem)'
     },
     footerContent: {
       maxWidth: '1200px',
       margin: '0 auto',
-      padding: '0 2rem',
+      padding: '0 1rem',
       textAlign: 'center'
     },
     footerText: {
       color: '#ccc',
-      fontSize: '0.9rem'
+      fontSize: 'clamp(0.8rem, 2.2vw, 0.9rem)'
+    },
+    // Mobile-specific styles
+    mobileMenuToggle: {
+      display: 'none',
+      background: 'none',
+      border: 'none',
+      color: 'white',
+      fontSize: '1.5rem',
+      cursor: 'pointer',
+      padding: '0.5rem'
+    },
+    mobileNav: {
+      display: 'none',
+      flexDirection: 'column',
+      width: '100%',
+      gap: '1rem',
+      marginTop: '1rem',
+      paddingTop: '1rem',
+      borderTop: '1px solid #333'
+    },
+    mobileNavVisible: {
+      display: 'flex'
     }
   };
 
@@ -322,7 +359,7 @@ const NewsWebsite = () => {
       
       const locationData = {
         ...location,
-        timestamp: new Date(location.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        timestamp: new Date(location.timestamp),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
         referrer: document.referrer,
