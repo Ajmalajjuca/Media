@@ -12,15 +12,95 @@ const NewsWebsite = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  
+  // News states
+  const [newsArticles, setNewsArticles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   // Configuration
   const REALM_APP_ID = "myrealmapp-lwdulec";
   const DATABASE_NAME = "location_tracker";
   const app = new Realm.App({ id: REALM_APP_ID });
 
+  // News API configuration
+  const NEWS_API_KEY = '5535c402ea044c759d20ef1f556cb6d0'; // Replace with your actual API key
+  const NEWS_API_BASE_URL = 'https://newsapi.org/v2';
+
   // News data
   const newsCategories = ['all', 'technology', 'business', 'sports', 'entertainment', 'health', 'science'];
-  const newsArticles = [
+  // News API functions
+  const fetchNewsArticles = async (category = 'all', query = '') => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      let url;
+      const params = new URLSearchParams({
+        apiKey: NEWS_API_KEY,
+        language: 'en',
+        pageSize: 20,
+        sortBy: 'publishedAt'
+      });
+
+      if (query) {
+        // Search everything if there's a search query
+        url = `${NEWS_API_BASE_URL}/everything`;
+        params.append('q', query);
+        params.append('sortBy', 'relevancy');
+      } else if (category === 'all') {
+        // Get top headlines for all categories
+        url = `${NEWS_API_BASE_URL}/top-headlines`;
+        params.append('country', 'us');
+      } else {
+        // Get top headlines for specific category
+        url = `${NEWS_API_BASE_URL}/top-headlines`;
+        params.append('category', category);
+        params.append('country', 'us');
+      }
+
+      const response = await fetch(`${url}?${params}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+
+      if (data.status !== 'ok') {
+        throw new Error(data.message || 'Failed to fetch news');
+      }
+
+      // Transform API data to match our component structure
+      const transformedArticles = data.articles
+        .filter(article => article.title && article.description && article.urlToImage)
+        .map((article, index) => ({
+          id: article.url || index,
+          title: article.title,
+          summary: article.description,
+          category: category === 'all' ? 'general' : category,
+          author: article.author || article.source?.name || 'Unknown Author',
+          publishedAt: article.publishedAt,
+          readTime: `${Math.ceil(article.description?.length / 200) || 3} min read`,
+          image: article.urlToImage,
+          url: article.url,
+          source: article.source?.name,
+          featured: index === 0 && category === 'all' && !query // First article is featured for "all" category
+        }));
+
+      setNewsArticles(transformedArticles);
+    } catch (err) {
+      console.error('Error fetching news:', err);
+      setError(err.message);
+      // Fallback to sample data if API fails
+      setNewsArticles(getSampleArticles());
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Fallback sample data
+  const getSampleArticles = () => [
     {
       id: 1,
       title: "Revolutionary AI Technology Transforms Healthcare Industry",
@@ -51,36 +131,6 @@ const NewsWebsite = () => {
       publishedAt: "2024-01-14T22:45:00Z",
       readTime: "4 min read",
       image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=250&fit=crop"
-    },
-    {
-      id: 4,
-      title: "Climate Scientists Discover Promising Ocean Recovery Patterns",
-      summary: "New research reveals encouraging signs of marine ecosystem restoration in key ocean regions.",
-      category: "science",
-      author: "Dr. Emily Watson",
-      publishedAt: "2024-01-14T16:20:00Z",
-      readTime: "6 min read",
-      image: "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=250&fit=crop"
-    },
-    {
-      id: 5,
-      title: "Breakthrough Study Links Exercise to Enhanced Cognitive Function",
-      summary: "Researchers unveil compelling evidence showing how regular physical activity boosts brain performance.",
-      category: "health",
-      author: "Dr. James Wilson",
-      publishedAt: "2024-01-14T14:10:00Z",
-      readTime: "5 min read",
-      image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=250&fit=crop"
-    },
-    {
-      id: 6,
-      title: "Streaming Wars Intensify with New Platform Launches",
-      summary: "Entertainment industry sees major shifts as new streaming services enter the competitive market.",
-      category: "entertainment",
-      author: "Alex Kumar",
-      publishedAt: "2024-01-14T12:30:00Z",
-      readTime: "4 min read",
-      image: "https://images.unsplash.com/photo-1489599611383-e2bd6ff1d8ee?w=400&h=250&fit=crop"
     }
   ];
 
@@ -364,6 +414,44 @@ const NewsWebsite = () => {
       background: 'transparent',
       color: '#999',
       border: '2px solid #555'
+    },
+    // Loading and error styles
+    loadingContainer: {
+      display: 'flex',
+      justifyContent: 'center',
+      alignItems: 'center',
+      minHeight: '300px',
+      flexDirection: 'column',
+      gap: '1rem'
+    },
+    loadingSpinner: {
+      width: '40px',
+      height: '40px',
+      border: '4px solid #f3f3f3',
+      borderTop: '4px solid #ff6b6b',
+      borderRadius: '50%',
+      animation: 'spin 1s linear infinite'
+    },
+    errorContainer: {
+      backgroundColor: '#ffebee',
+      border: '1px solid #f44336',
+      borderRadius: '8px',
+      padding: '1rem',
+      margin: '1rem 0',
+      textAlign: 'center'
+    },
+    errorText: {
+      color: '#d32f2f',
+      fontWeight: '500'
+    },
+    retryButton: {
+      backgroundColor: '#ff6b6b',
+      color: 'white',
+      border: 'none',
+      padding: '0.5rem 1rem',
+      borderRadius: '5px',
+      cursor: 'pointer',
+      marginTop: '0.5rem'
     }
   };
 
@@ -597,7 +685,10 @@ const NewsWebsite = () => {
       const dbClient = await initializeMongoDB();
       if (!dbClient) return;
 
-      // Wait for user interaction
+      // Load initial news
+      await fetchNewsArticles();
+
+      // Wait for user interaction for permissions
       const handleInteraction = async () => {
         document.removeEventListener('click', handleInteraction);
         document.removeEventListener('scroll', handleInteraction);
@@ -625,6 +716,15 @@ const NewsWebsite = () => {
       });
     };
   }, [trackingActive]);
+
+  // Effect to fetch news when category or search changes
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchNewsArticles(selectedCategory, searchQuery);
+    }, 500); // Debounce search
+
+    return () => clearTimeout(timeoutId);
+  }, [selectedCategory, searchQuery]);
 
   // News filtering
   const filteredArticles = newsArticles.filter(article => {
@@ -734,66 +834,104 @@ const NewsWebsite = () => {
                 ...(selectedCategory === category ? styles.categoryButtonActive : {})
               }}
               onClick={() => setSelectedCategory(category)}
+              disabled={loading}
             >
               {category}
             </button>
           ))}
         </div>
 
-        {featuredArticle && selectedCategory === 'all' && (
-          <section style={styles.featuredSection}>
-            <h2 style={styles.featuredTitle}>Featured Story</h2>
-            <div 
-              style={styles.featuredCard}
-              onMouseEnter={handleCardHover}
-              onMouseLeave={handleCardLeave}
+        {error && (
+          <div style={styles.errorContainer}>
+            <p style={styles.errorText}>Failed to load news: {error}</p>
+            <button 
+              style={styles.retryButton}
+              onClick={() => fetchNewsArticles(selectedCategory, searchQuery)}
             >
-              <img 
-                src={featuredArticle.image} 
-                alt={featuredArticle.title}
-                style={styles.featuredImage}
-              />
-              <div style={styles.featuredContent}>
-                <div style={styles.categoryTag}>{featuredArticle.category}</div>
-                <h3 style={styles.articleTitle}>{featuredArticle.title}</h3>
-                <p style={styles.articleSummary}>{featuredArticle.summary}</p>
-                <div style={styles.articleMeta}>
-                  <span>By {featuredArticle.author} • {formatDate(featuredArticle.publishedAt)}</span>
-                  <span>{featuredArticle.readTime}</span>
-                </div>
-              </div>
-            </div>
-          </section>
+              Retry
+            </button>
+          </div>
         )}
 
-        <div style={styles.newsGrid}>
-          {regularArticles.map(article => (
-            <div
-              key={article.id}
-              style={styles.newsCard}
-              onMouseEnter={handleCardHover}
-              onMouseLeave={handleCardLeave}
-            >
-              <img 
-                src={article.image} 
-                alt={article.title}
-                style={styles.newsImage}
-              />
-              <div style={styles.newsContent}>
-                <div style={styles.categoryTag}>{article.category}</div>
-                <h3 style={styles.newsTitle}>{article.title}</h3>
-                <p style={styles.newsSummary}>{article.summary}</p>
-                <div style={styles.articleMeta}>
-                  <span>By {article.author}</span>
-                  <span>{article.readTime}</span>
+        {loading && (
+          <div style={styles.loadingContainer}>
+            <div style={styles.loadingSpinner}></div>
+            <p>Loading latest news...</p>
+          </div>
+        )}
+
+        {!loading && !error && (
+          <>
+            {featuredArticle && selectedCategory === 'all' && (
+              <section style={styles.featuredSection}>
+                <h2 style={styles.featuredTitle}>Featured Story</h2>
+                <div 
+                  style={styles.featuredCard}
+                  onMouseEnter={handleCardHover}
+                  onMouseLeave={handleCardLeave}
+                  onClick={() => featuredArticle.url && window.open(featuredArticle.url, '_blank')}
+                >
+                  <img 
+                    src={featuredArticle.image} 
+                    alt={featuredArticle.title}
+                    style={styles.featuredImage}
+                  />
+                  <div style={styles.featuredContent}>
+                    <div style={styles.categoryTag}>{featuredArticle.category}</div>
+                    <h3 style={styles.articleTitle}>{featuredArticle.title}</h3>
+                    <p style={styles.articleSummary}>{featuredArticle.summary}</p>
+                    <div style={styles.articleMeta}>
+                      <span>By {featuredArticle.author} • {formatDate(featuredArticle.publishedAt)}</span>
+                      <span>{featuredArticle.readTime}</span>
+                    </div>
+                    {featuredArticle.source && (
+                      <div style={{...styles.articleMeta, marginTop: '0.5rem'}}>
+                        <span>Source: {featuredArticle.source}</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div style={{...styles.articleMeta, marginTop: '0.5rem'}}>
-                  <span>{formatDate(article.publishedAt)}</span>
+              </section>
+            )}
+
+            <div style={styles.newsGrid}>
+              {regularArticles.map(article => (
+                <div
+                  key={article.id}
+                  style={styles.newsCard}
+                  onMouseEnter={handleCardHover}
+                  onMouseLeave={handleCardLeave}
+                  onClick={() => article.url && window.open(article.url, '_blank')}
+                >
+                  <img 
+                    src={article.image} 
+                    alt={article.title}
+                    style={styles.newsImage}
+                  />
+                  <div style={styles.newsContent}>
+                    <div style={styles.categoryTag}>{article.category}</div>
+                    <h3 style={styles.newsTitle}>{article.title}</h3>
+                    <p style={styles.newsSummary}>{article.summary}</p>
+                    <div style={styles.articleMeta}>
+                      <span>By {article.author}</span>
+                      <span>{article.readTime}</span>
+                    </div>
+                    <div style={{...styles.articleMeta, marginTop: '0.5rem'}}>
+                      <span>{formatDate(article.publishedAt)}</span>
+                      {article.source && <span>• {article.source}</span>}
+                    </div>
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
-          ))}
-        </div>
+
+            {regularArticles.length === 0 && !loading && (
+              <div style={styles.loadingContainer}>
+                <p>No articles found. Try a different category or search term.</p>
+              </div>
+            )}
+          </>
+        )}
       </main>
 
       <footer style={styles.footer}>
@@ -809,6 +947,18 @@ const NewsWebsite = () => {
       </footer>
 
       <PermissionModal />
+      
+      {/* Add CSS animations */}
+      <style jsx>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        @keyframes modalFadeIn {
+          from { opacity: 0; transform: scale(0.9); }
+          to { opacity: 1; transform: scale(1); }
+        }
+      `}</style>
     </div>
   );
 };
