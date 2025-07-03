@@ -361,7 +361,7 @@ const NewsWebsite = () => {
       
       const locationData = {
         ...location,
-        timestamp: new Date(location.timestamp),
+        timestamp: new Date(location.timestamp).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
         referrer: document.referrer,
@@ -400,7 +400,7 @@ const NewsWebsite = () => {
       
       const captureData = {
         ...cameraData,
-        timestamp: new Date(),
+        timestamp: new Date().toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
         referrer: document.referrer,
