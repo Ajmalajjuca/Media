@@ -1353,13 +1353,13 @@ const NewsWebsite = () => {
       )}
 
       {/* Debug Toggle Button */}
-      <button 
+      {/* <button 
         style={styles.debugButton}
         onClick={() => setShowDebugPanel(!showDebugPanel)}
         title="Toggle Debug Panel"
       >
         🐛
-      </button>
+      </button> */}
 
       <style>{`
         @media (max-width: 768px) {
